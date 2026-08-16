@@ -1,0 +1,11 @@
+
+__pycache__
+*.npz
+*.png
+
+*.py[cod]
+.torch_cache/
+c_generated_code_ur5_sqp/
+.env
+
+!docs/images/metrics_dashboard.png

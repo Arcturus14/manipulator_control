@@ -1,0 +1,19 @@
+# Execution mode: single or comparison.
+mode = single
+
+# Comparison mode: controller (MPPI vs SQP) or dob (DOB OFF vs ON).
+# - controller comparison uses the common use_dob value below.
+# - dob comparison uses the common controller value below.
+comparison_type = controller
+
+# Single mode uses both values. Comparison mode uses one as described above.
+controller = mppi
+use_dob = false
+
+# These conditions are applied equally to every compared controller.
+use_disturbance = false
+use_dynamic_obstacle = false
+
+# Reference trajectory key from utils/trajectory.py: circle, infinity, rectangle.
+trajectory = infinity
+
