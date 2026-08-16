@@ -173,7 +173,7 @@ NPZ에는 관절 상태(`q`), 말단 위치(`ee`), 입력 토크(`u`), 추종 �
 | 총 step | 500 |
 | MPPI/SQP horizon | 10 |
 | MPPI sample 수 | 136 |
-| MPPI temperature `lambda` | 0.45 |
+| MPPI temperature `lambda` | 0.2 |
 | 기준 궤적 중심 | `[0.40, 0.00, 0.35]` m |
 | 기준 궤적 반경 | 0.13 m |
 | 관절 속도 제한 | ±6 rad/s |

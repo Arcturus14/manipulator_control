@@ -14,6 +14,6 @@ use_dob = false
 use_disturbance = false
 use_dynamic_obstacle = false
 
-# Reference trajectory key from utils/trajectory.py: circle, infinity, rectangle.
+# Reference trajectory key from utils/trajectory.py: circle, infinity, rectangle, complex_3d_wave
 trajectory = infinity
 

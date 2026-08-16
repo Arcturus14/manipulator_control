@@ -63,18 +63,24 @@ TIMING_WARMUP_STEPS = 10
 # MPPI
 HORIZON = 10
 N_SAMPLES = 136
-LAMBDA = 0.45
+MPPI_SEED = 7
+LAMBDA = 0.2
 NOISE_VAR = (16.0, 28.0, 16.0, 3.2, 3.2, 1.0)
 HORIZON_OBS = 10
 N_SAMPLES_OBS = 136
 
-# Cost weights
-W_POS = 120_000.0
+# MPPI cost weights
+MPPI_W_POS = 960_000.0
+MPPI_W_TERM = 2_400_000.0
 W_ACT = 0.0005
 W_VEL = 5.0
-W_TERM = 300_000.0
 W_SMOOTH = 0.25
 W_SMOOTH_OBS = 0.025
+
+# SQP position cost weights are kept separate so MPPI tuning does not change
+# the deterministic controller used as the comparison baseline.
+W_POS = 120_000.0
+W_TERM = 300_000.0
 
 # Static obstacles
 OBSTACLES = (

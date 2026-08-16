@@ -6,7 +6,7 @@ export ACADOS_SOURCE_DIR="${ACADOS_SOURCE_DIR:-/home/arclab-04/acados}"
 export LD_LIBRARY_PATH="${ACADOS_SOURCE_DIR}/lib:${LD_LIBRARY_PATH:-}"
 export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib-test-manipulator}"
 
-PYTHON_BIN="/home/arclab-04/miniconda3/envs/test/bin/python"
+PYTHON_BIN="/home/arclab-04/miniconda3/envs/manipulator/bin/python"
 CONFIG_PATH="${SCRIPT_DIR}/config.txt"
 cd "${SCRIPT_DIR}"
 

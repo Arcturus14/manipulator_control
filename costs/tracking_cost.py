@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import torch
 
-from config import W_ACT, W_POS, W_SMOOTH, W_TERM, W_VEL
+from config import MPPI_W_POS, MPPI_W_TERM, W_ACT, W_SMOOTH, W_VEL
 from kinematics.ur5_kinematics import fk_batch
 
 from .base_cost import BaseCost
@@ -24,7 +24,7 @@ class TrackingCost(BaseCost):
         torque = action.clamp(self.u_min, self.u_max)
         ee = fk_batch(state[:, :6])
         reference = self.waypoints[self.episode_step + step]
-        cost = W_POS * (ee - reference).square().sum(dim=1)
+        cost = MPPI_W_POS * (ee - reference).square().sum(dim=1)
         cost += W_ACT * torque.square().sum(dim=1)
         cost += W_VEL * state[:, 6:].square().sum(dim=1)
         if step == 0:
@@ -34,5 +34,5 @@ class TrackingCost(BaseCost):
     def terminal(self, states: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
         last_q = states[..., -1, :6].reshape(-1, 6)
         reference = self.waypoints[self.episode_step + self.horizon]
-        cost = W_TERM * (fk_batch(last_q) - reference).square().sum(dim=1)
+        cost = MPPI_W_TERM * (fk_batch(last_q) - reference).square().sum(dim=1)
         return cost.reshape(states.shape[:2])

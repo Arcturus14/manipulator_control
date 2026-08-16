@@ -34,7 +34,27 @@ def rectangle(n: int, center: np.ndarray, radius: float) -> np.ndarray:
                       for i in range(4)])
 
 
-TRAJECTORIES = {"circle": circle, "infinity": infinity, "rectangle": rectangle}
+def complex_3d_wave(n: int, c: np.ndarray, r: float) -> np.ndarray:
+    """3엽 반경 변조와 수직 파동을 결합한 3차원 기준 궤적을 생성한다.
+
+    - X, Y: 3엽 장미 곡선과 주파수 변조가 결합된 입체 궤적
+    - Z: 높낮이가 위아래로 유연하게 파동 치는 3D 이동
+    """
+    ts = np.linspace(0, 2 * math.pi, n, endpoint=False)
+    points = np.tile(c.copy(), (n, 1))
+    
+    # X, Y 평면: 3엽 장미 변형 곡선 (r_scale이 주파수에 따라 변함)
+    r_scale = r * (0.8 + 0.3 * np.cos(3 * ts))
+    points[:, 0] += r_scale * np.cos(ts)
+    points[:, 1] += r_scale * np.sin(ts)
+    
+    # Z 축: 높이 $z_c$ 중심으로 위아래로 $\pm 8\text{cm}$ 출렁임
+    points[:, 2] += 0.08 * np.sin(2 * ts)
+    
+    return points
+
+
+TRAJECTORIES = {"circle": circle, "infinity": infinity, "rectangle": rectangle, "complex_3d_wave":complex_3d_wave}
 
 
 def crossing_obstacle_paths(n_steps: int, center: np.ndarray) -> np.ndarray:

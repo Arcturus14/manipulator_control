@@ -43,7 +43,7 @@ _prefer_matplotlib_toolkits()
 import matplotlib.pyplot as plt
 
 from config import (CROSS_EXP_K, CROSS_EXP_W, CROSS_EXP_ZONE, CROSS_MARGIN,
-                    CROSS_RADIUS, DT, HORIZON_OBS, N_STEPS,
+                    CROSS_RADIUS, DT, HORIZON_OBS, MPPI_SEED, N_STEPS,
                     TIMING_WARMUP_STEPS, TRAJ_CENTER, TRAJ_RADIUS)
 from controllers.mppi_dob_controller import UR5Tracker
 from costs.obstacle_cost import ObstacleCost
@@ -134,6 +134,9 @@ def initial_configuration(reference: np.ndarray, target_device: torch.device) ->
 def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
              use_dob: bool = False,
              dynamic_paths: np.ndarray | None = None) -> dict:
+    # MPPI is stochastic. A fixed seed makes controller tuning comparisons
+    # reproducible while leaving the sampled-control algorithm unchanged.
+    torch.manual_seed(MPPI_SEED)
     target_device = device()
     simulation_dtype = torch.float32
     obstacle = None
