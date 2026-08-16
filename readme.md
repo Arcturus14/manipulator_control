@@ -8,7 +8,7 @@ UR5 6축 매니퓰레이터의 Cartesian 궤적 추종 성능을 시뮬레이션
 
 - UR5의 6자유도 비선형 강체 동역학 시뮬레이션
 - GPU 가속 MPPI와 acados 기반 Full-SQP 제어
-- 원(circle), 8자(infinity), 사각형(rectangle) 말단 궤적 추종
+- 원(circle), 8자(infinity), 사각형(rectangle), 3D 파동(complex_3d_wave) 말단 궤적 추종
 - 정현파 토크 외란과 1차 Q-filter DOB 보상
 - 서로 반대 방향으로 교차하는 두 개의 동적 구형 장애물
 - 단일 조건 실행 또는 다음 두 조건 비교
@@ -144,6 +144,17 @@ python run_comparison.py --config config.txt
 ```
 
 설정 파일 없이 `python run.py`를 실행하면 제어기, 외란, DOB, 장애물, 궤적을 터미널에서 대화형으로 선택할 수 있습니다.
+
+MPPI 튜닝값은 여러 난수 조건에서 다음과 같이 paired benchmark할 수 있습니다.
+
+```bash
+python benchmark_mppi.py \
+  --seeds 7 17 27 37 47 \
+  --trajectory infinity \
+  --output /tmp/mppi_multiseed_infinity.json
+```
+
+각 seed에서 기존 설정과 현재 튜닝 설정을 동일한 난수 조건으로 실행하고, 추종 오차의 평균·표준편차, 계산시간, 20 ms deadline 위반률과 토크 포화율을 출력합니다.
 
 첫 MPPI 실행에서는 Torch/Inductor kernel 컴파일 때문에 초기 시간이 오래 걸릴 수 있습니다. 컴파일 캐시는 실행 중 시스템 임시 디렉터리에만 유지되고 정상 종료 시 자동 삭제되므로 다음 실행에서는 다시 컴파일됩니다. 성능 통계에서는 최초 10 step을 warm-up으로 제외합니다. 실행 종료 시 Matplotlib 창이 열리고 `plt.show()`에서 대기하므로 GUI가 없는 환경에서는 적절한 Matplotlib backend 설정이 필요합니다.
 

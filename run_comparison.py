@@ -43,8 +43,9 @@ _prefer_matplotlib_toolkits()
 import matplotlib.pyplot as plt
 
 from config import (CROSS_EXP_K, CROSS_EXP_W, CROSS_EXP_ZONE, CROSS_MARGIN,
-                    CROSS_RADIUS, DT, HORIZON_OBS, MPPI_SEED, N_STEPS,
-                    TIMING_WARMUP_STEPS, TRAJ_CENTER, TRAJ_RADIUS)
+                    CROSS_RADIUS, DT, HORIZON_OBS, LAMBDA, MPPI_SEED,
+                    MPPI_W_POS, MPPI_W_TERM, N_STEPS, TIMING_WARMUP_STEPS,
+                    TRAJ_CENTER, TRAJ_RADIUS)
 from controllers.mppi_dob_controller import UR5Tracker
 from costs.obstacle_cost import ObstacleCost
 from kinematics.ur5_kinematics import ik_np
@@ -133,10 +134,15 @@ def initial_configuration(reference: np.ndarray, target_device: torch.device) ->
 
 def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
              use_dob: bool = False,
-             dynamic_paths: np.ndarray | None = None) -> dict:
+             dynamic_paths: np.ndarray | None = None, *,
+             seed: int = MPPI_SEED,
+             n_samples: int | None = None,
+             temperature: float = LAMBDA,
+             position_weight: float = MPPI_W_POS,
+             terminal_weight: float = MPPI_W_TERM) -> dict:
     # MPPI is stochastic. A fixed seed makes controller tuning comparisons
     # reproducible while leaving the sampled-control algorithm unchanged.
-    torch.manual_seed(MPPI_SEED)
+    torch.manual_seed(seed)
     target_device = device()
     simulation_dtype = torch.float32
     obstacle = None
@@ -149,8 +155,12 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
             exp_gain=CROSS_EXP_K,
             exp_zone=CROSS_EXP_ZONE,
         )
-    tracker = UR5Tracker(reference, target_device, dtype=simulation_dtype,
-                         obstacle_cost=obstacle)
+    tracker = UR5Tracker(
+        reference, target_device, dtype=simulation_dtype,
+        obstacle_cost=obstacle, n_samples=n_samples,
+        temperature=temperature, position_weight=position_weight,
+        terminal_weight=terminal_weight,
+    )
     start = time.perf_counter()
     q, ee, control, error_mm, _, estimate, actual = tracker.run(
         initial_configuration(reference, target_device),
@@ -174,6 +184,10 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         "has_disturbance": np.asarray(has_disturbance),
         "use_dob": np.asarray(use_dob),
         "use_obstacle": np.asarray(dynamic_paths is not None),
+        "mppi_seed": np.asarray(seed),
+        "mppi_temperature": np.asarray(temperature),
+        "mppi_position_weight": np.asarray(position_weight),
+        "mppi_terminal_weight": np.asarray(terminal_weight),
         "controller": np.asarray("mppi"),
         "dynamics_model": np.asarray("M(q)qdd+C(q,qd)qd+g(q)+Bqd=tau"),
         **({"cross_paths": dynamic_paths} if dynamic_paths is not None else {}),

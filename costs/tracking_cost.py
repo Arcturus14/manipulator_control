@@ -12,11 +12,15 @@ from .base_cost import BaseCost
 class TrackingCost(BaseCost):
     def __init__(self, waypoints: torch.Tensor, horizon: int,
                  u_min: torch.Tensor, u_max: torch.Tensor,
-                 smooth_weight: float = W_SMOOTH):
+                 smooth_weight: float = W_SMOOTH,
+                 position_weight: float = MPPI_W_POS,
+                 terminal_weight: float = MPPI_W_TERM):
         self.waypoints = waypoints
         self.horizon = horizon
         self.u_min, self.u_max = u_min, u_max
         self.smooth_weight = smooth_weight
+        self.position_weight = position_weight
+        self.terminal_weight = terminal_weight
         self.episode_step = 0
         self.previous_action = torch.zeros_like(u_max)
 
@@ -24,7 +28,7 @@ class TrackingCost(BaseCost):
         torque = action.clamp(self.u_min, self.u_max)
         ee = fk_batch(state[:, :6])
         reference = self.waypoints[self.episode_step + step]
-        cost = MPPI_W_POS * (ee - reference).square().sum(dim=1)
+        cost = self.position_weight * (ee - reference).square().sum(dim=1)
         cost += W_ACT * torque.square().sum(dim=1)
         cost += W_VEL * state[:, 6:].square().sum(dim=1)
         if step == 0:
@@ -34,5 +38,5 @@ class TrackingCost(BaseCost):
     def terminal(self, states: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
         last_q = states[..., -1, :6].reshape(-1, 6)
         reference = self.waypoints[self.episode_step + self.horizon]
-        cost = MPPI_W_TERM * (fk_batch(last_q) - reference).square().sum(dim=1)
+        cost = self.terminal_weight * (fk_batch(last_q) - reference).square().sum(dim=1)
         return cost.reshape(states.shape[:2])

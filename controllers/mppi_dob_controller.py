@@ -7,8 +7,9 @@ import numpy as np
 import torch
 from pytorch_mppi import MPPI
 
-from config import (DT, HORIZON, HORIZON_OBS, LAMBDA, N_SAMPLES, N_SAMPLES_OBS,
-                    NOISE_VAR, N_STEPS, W_SMOOTH, W_SMOOTH_OBS)
+from config import (DT, HORIZON, HORIZON_OBS, LAMBDA, MPPI_W_POS,
+                    MPPI_W_TERM, N_SAMPLES, N_SAMPLES_OBS, NOISE_VAR,
+                    N_STEPS, W_SMOOTH, W_SMOOTH_OBS)
 from costs.obstacle_cost import ObstacleCost
 from costs.tracking_cost import TrackingCost
 from dynamics.ur5_dynamics import UR5Dynamics
@@ -28,12 +29,17 @@ class UR5Tracker:
 
     def __init__(self, waypoints: np.ndarray, device: torch.device,
                  dtype: torch.dtype = torch.float32,
-                 obstacle_cost: ObstacleCost | None = None):
+                 obstacle_cost: ObstacleCost | None = None,
+                 *, n_samples: int | None = None,
+                 temperature: float = LAMBDA,
+                 position_weight: float = MPPI_W_POS,
+                 terminal_weight: float = MPPI_W_TERM):
         self.device, self.dtype = device, dtype
         self.step = 0
         self.obstacle_cost = obstacle_cost
         self.horizon = HORIZON_OBS if obstacle_cost else HORIZON
-        self.n_samples = N_SAMPLES_OBS if obstacle_cost else N_SAMPLES
+        default_samples = N_SAMPLES_OBS if obstacle_cost else N_SAMPLES
+        self.n_samples = default_samples if n_samples is None else n_samples
         self.dynamics = UR5Dynamics(device, dtype)
         # RNEA contains fixed six-link loops; compilation fuses them into a
         # small number of kernels and is essential for realtime rollout speed.
@@ -55,6 +61,7 @@ class UR5Tracker:
         self.tracking_cost = TrackingCost(
             self.waypoints, self.horizon,
             self.dynamics.u_min, self.dynamics.u_max, smooth_weight,
+            position_weight, terminal_weight,
         )
         if obstacle_cost is not None and obstacle_cost.horizon != self.horizon:
             raise ValueError("ObstacleCost horizon must match the obstacle MPPI horizon")
@@ -68,7 +75,7 @@ class UR5Tracker:
             noise_sigma=noise_sigma,
             num_samples=self.n_samples,
             horizon=self.horizon,
-            lambda_=LAMBDA,
+            lambda_=temperature,
             device=device,
             terminal_state_cost=self._terminal_cost,
             u_min=self.dynamics.u_min,
