@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "description": "Baseline captured before unconstrained-compute MPPI tracking tuning.",
+  "captured_at": "2026-08-18T18:55:35+09:00",
+  "git_base_commit": "7586d8e6d4705bba21fc9510a32b488fd5b93f3d",
+  "working_tree_note": "Controller and configuration changes were pending when this baseline was captured.",
+  "execution": {
+    "mode": "comparison",
+    "comparison_type": "controller",
+    "trajectory": "multiscale_3d",
+    "t_sim_s": 10.0,
+    "dt_s": 0.02,
+    "steps": 500,
+    "disturbance": true,
+    "dob": true,
+    "obstacle_mode": "static",
+    "static_obstacle_count": 10,
+    "collision_metric_scope": "continuous EE-point path versus 10 mm axis-aligned cubes"
+  },
+  "shared_limits": {
+    "joint_velocity_max_rad_s": 6.0,
+    "torque_max_nm": [150.0, 150.0, 150.0, 28.0, 28.0, 28.0]
+  },
+  "mppi_settings": {
+    "seed": 7,
+    "horizon": 9,
+    "samples": 112,
+    "temperature": 0.2,
+    "position_weight": 960000.0,
+    "terminal_weight": 2400000.0,
+    "action_weight": 0.0005,
+    "velocity_weight": 5.0,
+    "smooth_weight": 0.025,
+    "noise_variance": [16.0, 28.0, 16.0, 3.2, 3.2, 1.0],
+    "static_exp_weight": 5000.0,
+    "static_exp_gain": 500.0,
+    "static_margin_m": 0.002,
+    "static_zone_m": 0.004
+  },
+  "sqp_settings": {
+    "horizon": 10,
+    "max_iterations": 5,
+    "position_weight": 120000.0,
+    "terminal_weight": 300000.0,
+    "velocity_weight": 2000.0,
+    "action_weight": 0.0005,
+    "static_exp_weight": 100.0,
+    "static_exp_gain": 500.0,
+    "static_margin_m": 0.001,
+    "static_zone_m": 0.004,
+    "static_guidance_offset_m": 0.012,
+    "static_guidance_half_width_m": 0.020,
+    "dynamic_exp_weight": 300.0,
+    "dynamic_exp_gain": 55.0,
+    "dynamic_exp_zone_m": 0.015
+  },
+  "results": {
+    "mppi": {
+      "source_npz": "data/npz/mppi_dist_on_dob_on_obs_static_multiscale_3d_results.npz",
+      "mean_error_mm": 7.566118353861384,
+      "rmse_error_mm": 9.246371232535546,
+      "std_error_mm": 5.3150008490331215,
+      "max_error_mm": 24.364285171031952,
+      "final_error_mm": 3.1961221247911453,
+      "mean_step_time_ms": 15.574547608499415,
+      "p95_step_time_ms": 15.669837113819085,
+      "worst_step_time_ms": 16.560736985411495,
+      "deadline_miss_pct_20ms": 0.0,
+      "torque_saturated_step_pct": 0.0,
+      "static_contact_count": 0,
+      "static_clearance_mm": [
+        6.225543132388767,
+        6.296140560564031,
+        5.8517662344252415,
+        5.852038985781684,
+        5.461172755019614,
+        6.3225189923116565,
+        6.111007050787159,
+        6.241610122938751,
+        5.591574683992499,
+        6.370481699093726
+      ]
+    },
+    "sqp": {
+      "source_npz": "data/npz/sqp_dist_on_dob_on_obs_static_multiscale_3d_results.npz",
+      "mean_error_mm": 2.846700711375594,
+      "rmse_error_mm": 4.918298971750819,
+      "std_error_mm": 4.010730586237232,
+      "max_error_mm": 13.351101481817166,
+      "final_error_mm": 4.875665078784766,
+      "mean_step_time_ms": 3.0320488343713805,
+      "p95_step_time_ms": 3.306392699596472,
+      "worst_step_time_ms": 3.594638023059815,
+      "deadline_miss_pct_20ms": 0.0,
+      "torque_saturated_step_pct": 1.0,
+      "static_contact_count": 0,
+      "static_clearance_mm": [
+        4.522778807168561,
+        4.565515736699987,
+        4.130690101004131,
+        4.359786858159054,
+        4.792485839881113,
+        4.808114368336851,
+        4.338124076999492,
+        4.376833967962547,
+        4.104140063572047,
+        4.447126651776703
+      ]
+    }
+  }
+}

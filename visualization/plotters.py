@@ -143,7 +143,7 @@ def plot_timeseries(results: dict):
         axes[0].plot(time[:len(error)], error * 1e3, label=LABELS.get(key, key), color=COLORS.get(key), lw=2)
         axes[1].plot(time[:len(solve_time)], solve_time * 1e3, label=LABELS.get(key, key), color=COLORS.get(key), lw=2)
     _style_axis(axes[0], "Tracking Error", "EE error [mm]")
-    _style_axis(axes[1], "Realtime Cost", "step time [ms]")
+    _style_axis(axes[1], "Controller Step Time", "step time [ms]")
     axes[1].axhline(DT * 1e3, color="#111827", ls="--", label="control period")
     axes[1].set_xlabel("time [s]")
     for axis in axes:

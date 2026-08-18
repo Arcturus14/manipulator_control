@@ -13,12 +13,12 @@ use_dob = true
 # These conditions are applied equally to every compared controller.
 use_disturbance = true
 # Total trajectory traversal/simulation time in seconds. DT remains 0.02 s.
-T_SIM = 15.0
+T_SIM = 10.0
 # Obstacle mode: Dynamic, Static, or False.
 USE_OBSTACLES = Static
 # Static obstacles are distributed uniformly over the trajectory, excluding
 # the initial reference position.
-STATIC_OBSTACLE_COUNT = 6
+STATIC_OBSTACLE_COUNT = 10
 
 # Reference trajectory key from utils/trajectory.py: circle, infinity, rectangle, complex_3d_wave, multiscale_3d
-trajectory = rectangle
+trajectory = multiscale_3d

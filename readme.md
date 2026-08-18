@@ -115,7 +115,10 @@ Boolean 값에는 `true/false` 외에 `yes/no`, `y/n`, `1/0`, `on/off`도 사용
 
 정적 장애물 MPPI는 CUDA 완료 동기화 기준 20 ms 제어주기에 맞춘 별도 기본값을 사용합니다:
 예측 horizon 9, sample 112, 장애물 표면 안전 여유 2 mm, soft zone 4 mm입니다.
-동적 장애물과 SQP의 기존 파라미터에는 이 튜닝값이 적용되지 않습니다.
+SQP는 MPPI와 독립된 장벽 파라미터를 사용합니다. 정적 장애물에서는 국소 SQP가
+장애물 정면에서 멈추는 대칭 해를 피하기 위해 원래 기준 궤적 주변에 부드러운 측방
+유도 궤적을 내부적으로 생성합니다. 저장되는 오차는 계속 원래 기준 궤적에 대해
+계산되며, 내부 유도 궤적은 NPZ의 `sqp_guidance_waypoints`에 함께 저장됩니다.
 재검증에는 `benchmark_static_mppi.py --cases tuned_realtime`을 사용할 수 있습니다.
 
 ### 설정 예시

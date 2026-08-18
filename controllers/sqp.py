@@ -13,6 +13,7 @@ import math
 import os
 import sys
 import time
+import warnings
 from pathlib import Path
 
 # CasADi is installed in the mppi environment, while acados_template belongs to
@@ -31,13 +32,11 @@ import numpy as np
 import torch
 from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
 
-from config import (B_DAMP, CROSS_EXP_K, CROSS_EXP_W, CROSS_EXP_ZONE,
-                    CROSS_MARGIN, CROSS_RADIUS, DH_PARAMS, DQ_MAX, DT,
-                    GRAVITY, HORIZON, JOINT_ARMATURE, K_EXP, LINK_COM,
+from config import (B_DAMP, CROSS_MARGIN, CROSS_RADIUS, DH_PARAMS, DQ_MAX, DT,
+                    GRAVITY, HORIZON, JOINT_ARMATURE, LINK_COM,
                     LINK_INERTIA_DIAG, LINK_MASSES,
-                    MASS_MATRIX_REGULARIZATION, OBS_MARGIN, SOFT_ZONE,
-                    STATIC_OBSTACLE_SIZE, TAU_MAX,
-                    TIMING_WARMUP_STEPS, W_ACT, W_EXP, W_POS, W_TERM)
+                    MASS_MATRIX_REGULARIZATION, STATIC_OBSTACLE_SIZE, TAU_MAX,
+                    TIMING_WARMUP_STEPS, W_ACT, W_POS, W_TERM)
 from dynamics.ur5_dynamics import UR5Dynamics
 from kinematics.ur5_kinematics import fk_batch, ik_np, ik_trajectory_np
 from observers.dob import TorchDisturbanceObserver
@@ -50,6 +49,19 @@ SQP_W_VEL = 2_000.0
 SQP_W_ACT = W_ACT
 SQP_W_TERM = W_TERM
 SQP_MIN_OBSTACLE_SLOTS = 2
+
+# SQP-specific obstacle barriers.  Keeping these local is intentional: MPPI
+# uses sampling-specific barrier gains, while Gauss-Newton SQP needs a steep
+# residual before the warm-started trajectory reaches an obstacle.
+SQP_STATIC_EXP_WEIGHT = 100.0
+SQP_STATIC_EXP_GAIN = 500.0
+SQP_STATIC_MARGIN = 0.001
+SQP_STATIC_ZONE = 0.004
+SQP_STATIC_GUIDANCE_OFFSET = 0.012
+SQP_STATIC_GUIDANCE_HALF_WIDTH = 0.020
+SQP_CROSS_EXP_WEIGHT = 300.0
+SQP_CROSS_EXP_GAIN = 55.0
+SQP_CROSS_EXP_ZONE = 0.015
 
 _ROOT = Path(__file__).resolve().parents[1]
 _ACADOS_OUT = _ROOT / "c_generated_code_ur5_sqp"
@@ -182,18 +194,51 @@ def _casadi_fk(q):
 
 def _sphere_obstacle_residual(ee, center, enabled):
     distance = ca.sqrt(ca.sumsqr(ee - center) + 1e-8)
-    outer_radius = CROSS_RADIUS + CROSS_MARGIN + CROSS_EXP_ZONE
+    outer_radius = CROSS_RADIUS + CROSS_MARGIN + SQP_CROSS_EXP_ZONE
     penetration = ca.fmax(outer_radius - distance, 0)
-    return (enabled * math.sqrt(CROSS_EXP_W)
-            * (ca.exp(0.5 * CROSS_EXP_K * penetration) - 1))
+    return (enabled * math.sqrt(SQP_CROSS_EXP_WEIGHT)
+            * (ca.exp(0.5 * SQP_CROSS_EXP_GAIN * penetration) - 1))
 
 
 def _box_obstacle_residual(ee, center, enabled):
     outside = ca.fmax(ca.fabs(ee - center) - STATIC_OBSTACLE_SIZE / 2.0, 0)
     distance = ca.sqrt(ca.sumsqr(outside) + 1e-8)
-    penetration = ca.fmax(OBS_MARGIN + SOFT_ZONE - distance, 0)
-    return (enabled * math.sqrt(W_EXP)
-            * (ca.exp(0.5 * K_EXP * penetration) - 1))
+    penetration = ca.fmax(SQP_STATIC_MARGIN + SQP_STATIC_ZONE - distance, 0)
+    return (enabled * math.sqrt(SQP_STATIC_EXP_WEIGHT)
+            * (ca.exp(0.5 * SQP_STATIC_EXP_GAIN * penetration) - 1))
+
+
+def _static_avoidance_reference(waypoints: np.ndarray,
+                                centers: np.ndarray) -> np.ndarray:
+    """Add smooth lateral seeds that break SQP's head-on obstacle symmetry.
+
+    A barrier alone has no lateral gradient on a path through a cube center;
+    local SQP can therefore settle at a stop in front of the cube.  The bump is
+    used only as the optimizer reference.  Tracking metrics remain relative to
+    the requested, unmodified trajectory.
+    """
+    guided = np.asarray(waypoints, dtype=float).copy()
+    segment_length = np.linalg.norm(np.diff(guided, axis=0), axis=1)
+    arc_length = np.concatenate(([0.0], np.cumsum(segment_length)))
+    for center in np.asarray(centers):
+        obstacle_index = int(np.argmin(np.linalg.norm(guided - center, axis=1)))
+        before = max(0, obstacle_index - 2)
+        after = min(len(guided) - 1, obstacle_index + 2)
+        tangent = guided[after] - guided[before]
+        tangent_norm = np.linalg.norm(tangent)
+        if tangent_norm < 1e-9:
+            continue
+        tangent /= tangent_norm
+        normal = np.cross(tangent, np.array([0.0, 0.0, 1.0]))
+        if np.linalg.norm(normal) < 1e-6:
+            normal = np.cross(tangent, np.array([1.0, 0.0, 0.0]))
+        normal /= np.linalg.norm(normal)
+        distance = np.abs(arc_length - arc_length[obstacle_index])
+        active = distance < SQP_STATIC_GUIDANCE_HALF_WIDTH
+        phase = distance[active] / SQP_STATIC_GUIDANCE_HALF_WIDTH
+        bump = SQP_STATIC_GUIDANCE_OFFSET * 0.5 * (1.0 + np.cos(np.pi * phase))
+        guided[active] += bump[:, None] * normal
+    return guided
 
 
 def build_ur5_acados_ocp(
@@ -292,10 +337,21 @@ class UR5SQPTracker:
         if dynamic_paths is not None and static_centers is not None:
             raise ValueError("dynamic and static obstacles are mutually exclusive")
         self.original_count = len(waypoints)
-        self.waypoints = np.vstack((waypoints, np.tile(
+        optimization_waypoints = (
+            _static_avoidance_reference(waypoints, static_centers)
+            if static_centers is not None else np.asarray(waypoints)
+        )
+        self.waypoints = np.vstack((np.asarray(waypoints), np.tile(
             waypoints[-1:], (SQP_HORIZON + 2, 1)
         )))
-        reference_velocity = np.gradient(waypoints, DT, axis=0, edge_order=2)
+        self.optimization_waypoints = np.vstack((
+            optimization_waypoints, np.tile(
+                optimization_waypoints[-1:], (SQP_HORIZON + 2, 1)
+            )
+        ))
+        reference_velocity = np.gradient(
+            optimization_waypoints, DT, axis=0, edge_order=2
+        )
         self.reference_velocity = np.vstack((reference_velocity, np.tile(
             reference_velocity[-1:], (SQP_HORIZON + 2, 1)
         )))
@@ -316,20 +372,34 @@ class UR5SQPTracker:
     def _build_solver(self, initial_state: np.ndarray) -> AcadosOcpSolver:
         print("[SQP] acados nonlinear OCP 준비 중 (호환 캐시 자동 재사용)...")
         start = time.perf_counter()
-        solver = AcadosOcpSolver(
-            build_ur5_acados_ocp(initial_state, self.obstacle_slots),
-            generate=False,
-            build=False,
-            check_reuse_possible=True,
-            verbose=False,
-        )
+        # A changed OCP makes acados_template read the previous cache JSON for
+        # compatibility.  Different acados versions can leave harmless legacy
+        # fields in that JSON and emit one warning per unknown field.  Limit
+        # suppression to those cache-schema warnings; solver/build warnings
+        # with any other message remain visible.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"Attribute .* not in dictionary\.",
+                category=UserWarning,
+                module=r"acados_template(?:\..*)?",
+            )
+            solver = AcadosOcpSolver(
+                build_ur5_acados_ocp(initial_state, self.obstacle_slots),
+                generate=False,
+                build=False,
+                check_reuse_possible=True,
+                verbose=False,
+            )
         cache_status = "재생성/컴파일" if solver.generated else "캐시 재사용"
         print(f"[SQP] solver ready ({cache_status}): "
               f"{time.perf_counter() - start:.2f} s")
         return solver
 
     def _feedforward(self, q0: np.ndarray):
-        joint = ik_trajectory_np(self.waypoints[:self.original_count], q0)
+        joint = ik_trajectory_np(
+            self.optimization_waypoints[:self.original_count], q0
+        )
         velocity = np.gradient(joint, DT, axis=0, edge_order=2)
         acceleration = np.gradient(velocity, DT, axis=0, edge_order=2)
         q_t = torch.as_tensor(joint, dtype=torch.float64)
@@ -391,13 +461,13 @@ class UR5SQPTracker:
             solver.set(0, "ubx", state_np)
             for stage in range(SQP_HORIZON):
                 reference_index = simulation_step + stage
-                yref = np.concatenate((self.waypoints[reference_index],
+                yref = np.concatenate((self.optimization_waypoints[reference_index],
                                        self.reference_velocity[reference_index],
                                        np.zeros(6 + self.obstacle_slots)))
                 solver.set(stage, "yref", yref)
                 solver.set(stage, "p", self._obstacle_parameter(simulation_step, stage))
             solver.set(SQP_HORIZON, "yref", np.concatenate((
-                self.waypoints[simulation_step + SQP_HORIZON],
+                self.optimization_waypoints[simulation_step + SQP_HORIZON],
                 np.zeros(self.obstacle_slots)
             )))
             solver.set(SQP_HORIZON, "p", self._obstacle_parameter(
@@ -468,6 +538,16 @@ class UR5SQPTracker:
             "obstacle_mode": np.asarray(self.obstacle_mode),
             "controller": np.asarray("sqp"),
             "dynamics_model": np.asarray("M(q)qdd+C(q,qd)qd+g(q)+Bqd=tau"),
+            "sqp_static_exp_weight": np.asarray(SQP_STATIC_EXP_WEIGHT),
+            "sqp_static_exp_gain": np.asarray(SQP_STATIC_EXP_GAIN),
+            "sqp_static_margin": np.asarray(SQP_STATIC_MARGIN),
+            "sqp_static_zone": np.asarray(SQP_STATIC_ZONE),
+            "sqp_cross_exp_weight": np.asarray(SQP_CROSS_EXP_WEIGHT),
+            "sqp_cross_exp_gain": np.asarray(SQP_CROSS_EXP_GAIN),
+            "sqp_cross_exp_zone": np.asarray(SQP_CROSS_EXP_ZONE),
+            **({"sqp_guidance_waypoints": self.optimization_waypoints[
+                :self.original_count
+            ]} if self.static_centers is not None else {}),
             **({"cross_paths": self.dynamic_paths} if self.dynamic_paths is not None else {}),
             **({"static_obstacle_centers": self.static_centers}
                if self.static_centers is not None else {}),
