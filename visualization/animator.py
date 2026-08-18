@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import matplotlib.pyplot as plt
 
-from config import CROSS_MARGIN, CROSS_RADIUS, DT, N_STEPS
+from config import CROSS_MARGIN, CROSS_RADIUS, DT, STATIC_OBSTACLE_SIZE
 from kinematics.ur5_kinematics import fk_joints_np
 from .plotters import COLORS, LABELS
 
@@ -22,7 +22,8 @@ def _sphere_wireframe(axis, center, radius, color):
 
 def animate_comparison(results: dict, waypoints: np.ndarray,
                        moving_obstacle_paths: np.ndarray | None = None,
-                       moving_obstacle_radius: float = CROSS_RADIUS):
+                       moving_obstacle_radius: float = CROSS_RADIUS,
+                       static_obstacle_centers: np.ndarray | None = None):
     """Create an interactive arm animation and return ``(figure, animation)``."""
     from matplotlib import animation
 
@@ -33,8 +34,14 @@ def animate_comparison(results: dict, waypoints: np.ndarray,
     for axis, key in zip(axes, keys):
         axis.set(xlim=(0.18, 0.62), ylim=(-0.22, 0.22), zlim=(0.13, 0.57),
                  xlabel="X", ylabel="Y", zlabel="Z")
+        axis.set_box_aspect((1, 1, 1))
         axis.set_title(LABELS.get(key, key), color=COLORS.get(key), fontweight="bold")
         axis.plot(*waypoints.T, "--", color="#008844", alpha=0.45)
+        if static_obstacle_centers is not None:
+            half = STATIC_OBSTACLE_SIZE / 2.0
+            for center in static_obstacle_centers:
+                axis.bar3d(*(center - half), *([STATIC_OBSTACLE_SIZE] * 3),
+                           color="#ff4400", alpha=0.7)
         arms.append([axis.plot([], [], [], color=LINK_COLORS[j], lw=4)[0] for j in range(6)])
         joints.append(axis.plot([], [], [], "o", color="#cc2200", ms=5)[0])
         ee_dots.append(axis.plot([], [], [], "D", color="#e06000", ms=7)[0])
@@ -55,7 +62,8 @@ def animate_comparison(results: dict, waypoints: np.ndarray,
             ee_dots[index].set_data([positions[-1, 0]], [positions[-1, 1]]); ee_dots[index].set_3d_properties([positions[-1, 2]])
             ee = results[key]["ee"][:frame_index + 1]
             traces[index].set_data(ee[:, 0], ee[:, 1]); traces[index].set_3d_properties(ee[:, 2])
-            error = results[key].get("err_mm", results[key].get("err") * 1e3)
+            error = (results[key]["err_mm"] if "err_mm" in results[key]
+                     else results[key]["err"] * 1e3)
             labels[index].set_text(f"step={frame_index}  err={error[max(frame_index-1, 0)]:.1f} mm")
             for artist in obstacle_artists[index]:
                 artist.remove()
@@ -74,7 +82,8 @@ def animate_comparison(results: dict, waypoints: np.ndarray,
                         np.full_like(theta, center[2]), "--", alpha=0.25)[0])
         return []
 
-    anim = animation.FuncAnimation(fig, update, frames=N_STEPS + 1,
+    frame_count = max(len(data["q"]) for data in results.values())
+    anim = animation.FuncAnimation(fig, update, frames=frame_count,
                                    interval=int(DT * 1000), blit=False, repeat=True)
     title = "UR5 Controller Simulation" if len(keys) == 1 else "UR5 Controller Comparison"
     fig.text(0.5, 0.98, title, ha="center", fontweight="bold")

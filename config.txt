@@ -1,5 +1,5 @@
 # Execution mode: single or comparison.
-mode = single
+mode = comparison
 
 # Comparison mode: controller (MPPI vs SQP) or dob (DOB OFF vs ON).
 # - controller comparison uses the common use_dob value below.
@@ -8,12 +8,17 @@ comparison_type = controller
 
 # Single mode uses both values. Comparison mode uses one as described above.
 controller = mppi
-use_dob = false
+use_dob = true
 
 # These conditions are applied equally to every compared controller.
-use_disturbance = false
-use_dynamic_obstacle = false
+use_disturbance = true
+# Total trajectory traversal/simulation time in seconds. DT remains 0.02 s.
+T_SIM = 15.0
+# Obstacle mode: Dynamic, Static, or False.
+USE_OBSTACLES = Static
+# Static obstacles are distributed uniformly over the trajectory, excluding
+# the initial reference position.
+STATIC_OBSTACLE_COUNT = 6
 
-# Reference trajectory key from utils/trajectory.py: circle, infinity, rectangle, complex_3d_wave
-trajectory = infinity
-
+# Reference trajectory key from utils/trajectory.py: circle, infinity, rectangle, complex_3d_wave, multiscale_3d
+trajectory = rectangle

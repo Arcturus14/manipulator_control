@@ -1,7 +1,7 @@
 """Run one configurable UR5 MPPI or SQP simulation.
 
 The user can independently enable plant disturbance, DOB compensation, and
-dynamic crossing obstacles. Results are stored under ``data/``.
+dynamic or reference-indexed static obstacles. Results are stored under ``data/``.
 """
 from __future__ import annotations
 
@@ -9,11 +9,11 @@ import logging
 import argparse
 from pathlib import Path
 
-# Configure this before run_comparison imports torch. The temporary directory
-# remains available during the process and is deleted on normal shutdown.
-from utils.torch_runtime import configure_temporary_inductor_cache
+# Configure this before run_comparison imports torch so compiled kernels can be
+# reused by later simulation processes.
+from utils.torch_runtime import configure_compilation_cache
 
-configure_temporary_inductor_cache()
+configure_compilation_cache()
 
 
 class _SmallGpuTemplateWarningFilter(logging.Filter):
@@ -30,12 +30,14 @@ logging.getLogger("torch._inductor.utils").addFilter(
 import matplotlib.pyplot as plt
 import numpy as np
 
-from config import HORIZON_OBS, N_STEPS, TRAJ_CENTER
+from config import (HORIZON_OBS, N_STEPS, STATIC_OBSTACLE_COUNT, TRAJ_CENTER,
+                    T_SIM)
 from run_comparison import (NPZ_DIR, compute_metrics, prepare_data_directories,
                             run_mppi, save_latest_plots, waypoints)
 from utils.execution_config import (configuration_name,
                                     load_execution_config)
-from utils.trajectory import TRAJECTORIES, crossing_obstacle_paths
+from utils.trajectory import (TRAJECTORIES, crossing_obstacle_paths,
+                              static_obstacle_centers)
 from visualization.animator import animate_comparison
 
 
@@ -51,6 +53,16 @@ def ask_boolean(prompt: str, default: bool) -> bool:
         if answer in {"n", "no", "0", "아니오", "ㄴ"}:
             return False
         print("  y 또는 n으로 입력해 주세요.")
+
+
+def ask_obstacle_mode() -> str:
+    while True:
+        answer = input(
+            "장애물 선택 [dynamic/static/false] (default=false): "
+        ).strip().lower() or "false"
+        if answer in {"dynamic", "static", "false"}:
+            return answer
+        print("  dynamic, static, false 중 하나를 입력해 주세요.")
 
 
 def command_line() -> argparse.Namespace:
@@ -76,7 +88,10 @@ def main() -> None:
             "controller": controller,
             "has_disturbance": ask_boolean("외란을 적용할까요?", False),
             "use_dob": ask_boolean("DOB 보상을 사용할까요?", False),
-            "use_obstacle": ask_boolean("움직이는 crossing 장애물을 사용할까요?", False),
+            "obstacle_mode": ask_obstacle_mode(),
+            "t_sim": T_SIM,
+            "n_steps": N_STEPS,
+            "static_obstacle_count": STATIC_OBSTACLE_COUNT,
         }
         choices = "/".join(TRAJECTORIES)
         trajectory = input(
@@ -89,27 +104,37 @@ def main() -> None:
     controller = settings["controller"]
     has_disturbance = settings["has_disturbance"]
     use_dob = settings["use_dob"]
-    use_obstacle = settings["use_obstacle"]
+    obstacle_mode = settings["obstacle_mode"]
     trajectory = settings["trajectory"]
 
-    reference = waypoints(trajectory)
-    paths = (crossing_obstacle_paths(N_STEPS + HORIZON_OBS + 2, TRAJ_CENTER)
-             if use_obstacle else None)
+    reference = waypoints(trajectory, settings["n_steps"])
+    paths = (crossing_obstacle_paths(
+        len(reference) + HORIZON_OBS + 2, TRAJ_CENTER
+    )
+             if obstacle_mode == "dynamic" else None)
+    static_centers = (static_obstacle_centers(
+        reference, settings["static_obstacle_count"]
+    )
+                      if obstacle_mode == "static" else None)
     print("\n[RUN] "
           f"controller={controller.upper()}, "
           f"disturbance={'ON' if has_disturbance else 'OFF'}, "
           f"DOB={'ON' if use_dob else 'OFF'}, "
-          f"obstacle={'ON' if use_obstacle else 'OFF'}, "
+          f"obstacle={obstacle_mode.upper()}, "
+          f"T_SIM={settings['t_sim']:g}s, "
+          f"static_count={settings['static_obstacle_count']}, "
           f"trajectory={trajectory}")
     if controller == "mppi":
         data = run_mppi(reference, has_disturbance=has_disturbance,
-                        use_dob=use_dob, dynamic_paths=paths)
+                        use_dob=use_dob, dynamic_paths=paths,
+                        static_centers=static_centers)
     else:
         from controllers.sqp import run_sqp
         data = run_sqp(reference, has_disturbance=has_disturbance,
-                       use_dob=use_dob, dynamic_paths=paths)
+                       use_dob=use_dob, dynamic_paths=paths,
+                       static_centers=static_centers)
     destination = NPZ_DIR / configuration_name(
-        controller, has_disturbance, use_dob, use_obstacle, trajectory
+        controller, has_disturbance, use_dob, obstacle_mode, trajectory
     )
     np.savez(destination, **data)
     print(f"[SAVE] {destination}")
@@ -124,9 +149,12 @@ def main() -> None:
     print(f"  MeanT={metrics['mean_solve_ms']:.2f} ms")
     print(f"  WorstT={metrics['worst_solve_ms']:.2f} ms")
 
-    saved_figures = save_latest_plots(results, reference, show_obstacles=use_obstacle)
+    saved_figures = save_latest_plots(
+        results, reference, dynamic_paths=paths, static_centers=static_centers
+    )
     figure, animation = animate_comparison(
-        results, reference, moving_obstacle_paths=paths
+        results, reference, moving_obstacle_paths=paths,
+        static_obstacle_centers=static_centers,
     )
     globals().update(_LIVE_FIGURE=figure, _LIVE_ANIMATION=animation,
                      _SAVED_FIGURES=saved_figures)

@@ -57,8 +57,9 @@ DT = 0.02
 T_SIM = 10.0
 N_STEPS = int(T_SIM / DT)
 
-# Ignore one-time Torch/CUDA compilation and cache warm-up in realtime metrics.
-TIMING_WARMUP_STEPS = 10
+# MPPI compilation is explicitly completed before the control loop, so every
+# control step is included in realtime metrics.
+TIMING_WARMUP_STEPS = 0
 
 # MPPI
 HORIZON = 10
@@ -77,16 +78,23 @@ W_VEL = 5.0
 W_SMOOTH = 0.25
 W_SMOOTH_OBS = 0.025
 
+# MPPI static-cube barrier, tuned for the 20 ms control period
+MPPI_STATIC_HORIZON = 9
+MPPI_STATIC_SAMPLES = 112
+MPPI_STATIC_EXP_WEIGHT = 5_000.0
+MPPI_STATIC_EXP_GAIN = 500.0
+MPPI_STATIC_MARGIN = 0.002
+MPPI_STATIC_ZONE = 0.004
+
 # SQP position cost weights are kept separate so MPPI tuning does not change
 # the deterministic controller used as the comparison baseline.
 W_POS = 120_000.0
 W_TERM = 300_000.0
 
-# Static obstacles
-OBSTACLES = (
-    {"center": (0.492, 0.092), "r_obs": 0.008},
-    {"center": (0.308, -0.092), "r_obs": 0.008},
-)
+# Static obstacles generated from the selected reference trajectory
+STATIC_OBSTACLE_SIZE = 0.010
+STATIC_OBSTACLE_COUNT = 4
+# SQP static-cube residual baseline (kept separate from MPPI tuning)
 W_EXP = 5e3
 K_EXP = 1.5
 OBS_MARGIN = 0.05

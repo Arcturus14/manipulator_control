@@ -8,9 +8,10 @@ UR5 6축 매니퓰레이터의 Cartesian 궤적 추종 성능을 시뮬레이션
 
 - UR5의 6자유도 비선형 강체 동역학 시뮬레이션
 - GPU 가속 MPPI와 acados 기반 Full-SQP 제어
-- 원(circle), 8자(infinity), 사각형(rectangle), 3D 파동(complex_3d_wave) 말단 궤적 추종
+- 원(circle), 8자(infinity), 사각형(rectangle), 3D 파동(complex_3d_wave), 다중 스케일 3D(multiscale_3d) 말단 궤적 추종
 - 정현파 토크 외란과 1차 Q-filter DOB 보상
-- 서로 반대 방향으로 교차하는 두 개의 동적 구형 장애물
+- 서로 반대 방향으로 교차하는 두 동적 구형 장애물 또는 기준 궤적에
+  균등 배치되는 10 mm 정적 정육면체 장애물
 - 단일 조건 실행 또는 다음 두 조건 비교
   - MPPI vs SQP
   - DOB OFF vs DOB ON
@@ -101,10 +102,21 @@ SQP를 사용하려면 CasADi와 빌드가 완료된 acados가 추가로 필요�
 | `controller` | `mppi`, `sqp` | 단일 실행 제어기 또는 DOB 비교의 공통 제어기 |
 | `use_dob` | `true`, `false` | 단일 실행 또는 제어기 비교에 공통 적용할 DOB 설정 |
 | `use_disturbance` | `true`, `false` | 외란 적용 여부 |
-| `use_dynamic_obstacle` | `true`, `false` | 교차 이동 장애물 적용 여부 |
-| `trajectory` | `circle`, `infinity`, `rectangle` | 기준 말단 궤적 |
+| `T_SIM` | 양의 실수, `DT`의 정수배 | 기준 궤적 1회 주행 및 전체 시뮬레이션 시간 [s] |
+| `USE_OBSTACLES` | `Dynamic`, `Static`, `False` | 이동 구 장애물, 균등 배치된 10 mm 정적 정육면체, 또는 장애물 미사용 |
+| `STATIC_OBSTACLE_COUNT` | 1 이상의 정수 | 시작점을 제외하고 궤적 진행률에 균등 배치할 정적 장애물 수 |
+| `trajectory` | `circle`, `infinity`, `rectangle`, `complex_3d_wave`, `multiscale_3d` | 기준 말단 궤적 |
 
 Boolean 값에는 `true/false` 외에 `yes/no`, `y/n`, `1/0`, `on/off`도 사용할 수 있습니다.
+
+`N_STEPS = T_SIM / DT`로 계산되므로 `DT`를 유지한 채 `T_SIM`을 늘리면 같은
+기준 궤적을 더 많은 step에 걸쳐 천천히 주행합니다. 정적 장애물은 설정한 개수를
+유지하면서 전체 궤적 진행률에 균등 배치되며 reference index 0에는 생성되지 않습니다.
+
+정적 장애물 MPPI는 CUDA 완료 동기화 기준 20 ms 제어주기에 맞춘 별도 기본값을 사용합니다:
+예측 horizon 9, sample 112, 장애물 표면 안전 여유 2 mm, soft zone 4 mm입니다.
+동적 장애물과 SQP의 기존 파라미터에는 이 튜닝값이 적용되지 않습니다.
+재검증에는 `benchmark_static_mppi.py --cases tuned_realtime`을 사용할 수 있습니다.
 
 ### 설정 예시
 
@@ -116,7 +128,9 @@ comparison_type = controller
 controller = mppi
 use_dob = true
 use_disturbance = true
-use_dynamic_obstacle = true
+T_SIM = 10.0
+USE_OBSTACLES = Dynamic
+STATIC_OBSTACLE_COUNT = 4
 trajectory = infinity
 ```
 
@@ -156,14 +170,16 @@ python benchmark_mppi.py \
 
 각 seed에서 기존 설정과 현재 튜닝 설정을 동일한 난수 조건으로 실행하고, 추종 오차의 평균·표준편차, 계산시간, 20 ms deadline 위반률과 토크 포화율을 출력합니다.
 
-첫 MPPI 실행에서는 Torch/Inductor kernel 컴파일 때문에 초기 시간이 오래 걸릴 수 있습니다. 컴파일 캐시는 실행 중 시스템 임시 디렉터리에만 유지되고 정상 종료 시 자동 삭제되므로 다음 실행에서는 다시 컴파일됩니다. 성능 통계에서는 최초 10 step을 warm-up으로 제외합니다. 실행 종료 시 Matplotlib 창이 열리고 `plt.show()`에서 대기하므로 GUI가 없는 환경에서는 적절한 Matplotlib backend 설정이 필요합니다.
+첫 MPPI 실행에서는 Torch/Inductor kernel 컴파일 때문에 초기 시간이 오래 걸릴 수 있습니다. 컴파일된 Inductor/Triton kernel은 `.torch_cache/`에 보관되어 이후 별도 프로세스에서도 재사용되며, 이 디렉터리는 Git에서 제외됩니다. 그래프나 실행 환경이 바뀌면 Torch가 새 cache key로 필요한 kernel만 다시 컴파일합니다. 커널 준비는 제어 루프 진입 전에 완료되며 성능 통계에는 모든 제어 step이 포함됩니다.
+
+SQP의 acados 생성 코드와 공유 라이브러리는 `c_generated_code_ur5_sqp/`에 보관되며 역시 Git에서 제외됩니다. 실행 시 현재 OCP와 캐시의 호환성을 검사해 일치하면 바로 재사용하고, 모델·horizon·비용·제약 등이 달라졌으면 자동으로 다시 생성하고 컴파일합니다. 실행 종료 시 Matplotlib 창이 열리고 `plt.show()`에서 대기하므로 GUI가 없는 환경에서는 적절한 Matplotlib backend 설정이 필요합니다.
 
 ## 결과
 
 각 실행은 다음 형식으로 결과를 저장합니다.
 
 ```text
-data/npz/{controller}_dist_{on|off}_dob_{on|off}_obs_{on|off}_{trajectory}_results.npz
+data/npz/{controller}_dist_{on|off}_dob_{on|off}_obs_{dynamic|static|false}_{trajectory}_results.npz
 ```
 
 NPZ에는 관절 상태(`q`), 말단 위치(`ee`), 입력 토크(`u`), 추종 오차(`err`, `err_mm`), 외란 추정/실제값(`d_hat`, `d_true`), DOB residual, step 계산 시간(`solve_t`) 및 실행 조건이 포함됩니다.

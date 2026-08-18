@@ -9,7 +9,7 @@ from pytorch_mppi import MPPI
 
 from config import (DT, HORIZON, HORIZON_OBS, LAMBDA, MPPI_W_POS,
                     MPPI_W_TERM, N_SAMPLES, N_SAMPLES_OBS, NOISE_VAR,
-                    N_STEPS, W_SMOOTH, W_SMOOTH_OBS)
+                    W_SMOOTH, W_SMOOTH_OBS)
 from costs.obstacle_cost import ObstacleCost
 from costs.tracking_cost import TrackingCost
 from dynamics.ur5_dynamics import UR5Dynamics
@@ -31,13 +31,16 @@ class UR5Tracker:
                  dtype: torch.dtype = torch.float32,
                  obstacle_cost: ObstacleCost | None = None,
                  *, n_samples: int | None = None,
+                 horizon: int | None = None,
                  temperature: float = LAMBDA,
                  position_weight: float = MPPI_W_POS,
-                 terminal_weight: float = MPPI_W_TERM):
+                 terminal_weight: float = MPPI_W_TERM,
+                 smooth_weight: float | None = None):
         self.device, self.dtype = device, dtype
         self.step = 0
         self.obstacle_cost = obstacle_cost
-        self.horizon = HORIZON_OBS if obstacle_cost else HORIZON
+        default_horizon = HORIZON_OBS if obstacle_cost else HORIZON
+        self.horizon = default_horizon if horizon is None else horizon
         default_samples = N_SAMPLES_OBS if obstacle_cost else N_SAMPLES
         self.n_samples = default_samples if n_samples is None else n_samples
         self.dynamics = UR5Dynamics(device, dtype)
@@ -55,9 +58,11 @@ class UR5Tracker:
         )
 
         waypoint_tensor = torch.as_tensor(waypoints, dtype=dtype, device=device)
+        self.episode_steps = len(waypoint_tensor)
         padding = waypoint_tensor[-1:].expand(self.horizon + 2, -1)
         self.waypoints = torch.cat([waypoint_tensor, padding])
-        smooth_weight = W_SMOOTH_OBS if obstacle_cost else W_SMOOTH
+        if smooth_weight is None:
+            smooth_weight = W_SMOOTH_OBS if obstacle_cost else W_SMOOTH
         self.tracking_cost = TrackingCost(
             self.waypoints, self.horizon,
             self.dynamics.u_min, self.dynamics.u_max, smooth_weight,
@@ -134,6 +139,25 @@ class UR5Tracker:
             self.dynamics.u_min, self.dynamics.u_max
         )
 
+    def _warm_up_controller(self, state: torch.Tensor,
+                            feedforward: torch.Tensor) -> None:
+        """Compile fixed-shape CUDA kernels before the realtime loop starts."""
+        cpu_rng = torch.get_rng_state()
+        cuda_rng = (torch.cuda.get_rng_state(self.device)
+                    if self.device.type == "cuda" else None)
+        original_u = self.ctrl.U.clone()
+        indices = torch.arange(self.horizon, device=self.device) + self.step
+        self.ctrl.U.copy_(feedforward[indices])
+        if self.device.type == "cuda":
+            torch.compiler.cudagraph_mark_step_begin()
+        self.ctrl.command(state, shift_nominal_trajectory=False)
+        if self.device.type == "cuda":
+            torch.cuda.synchronize(self.device)
+        self.ctrl.U.copy_(original_u)
+        torch.set_rng_state(cpu_rng)
+        if cuda_rng is not None:
+            torch.cuda.set_rng_state(cuda_rng, self.device)
+
     def run(self, q0: torch.Tensor, capture_samples: bool = False, n_show: int = 50,
             has_disturbance: bool = False, use_dob: bool = False):
         """Run one episode and return state, control, error, and DOB histories."""
@@ -145,6 +169,11 @@ class UR5Tracker:
         state = torch.cat([q0.to(device=self.device, dtype=self.dtype), velocity])
         feedforward = self._feedforward_torque(state[:6])
         residual_sequence = torch.zeros_like(self.ctrl.U)
+
+        print("[MPPI] rollout/cost kernels warming up outside control loop...")
+        warmup_start = time.perf_counter()
+        self._warm_up_controller(state, feedforward)
+        print(f"[MPPI] kernels ready: {time.perf_counter() - warmup_start:.2f} s")
 
         q_history = [state[:6].cpu().numpy()]
         ee_history = [fk_batch(state[:6].unsqueeze(0))[0].cpu().numpy()]
@@ -164,10 +193,10 @@ class UR5Tracker:
             mode = "DOB(외란 없음)"
         else:
             mode = "기본"
-        print(f"MPPI simulation [{mode}]: {N_STEPS} steps "
+        print(f"MPPI simulation [{mode}]: {self.episode_steps} steps "
               f"(K={self.n_samples}, T={self.horizon})")
 
-        for simulation_step in range(N_STEPS):
+        for simulation_step in range(self.episode_steps):
             indices = torch.arange(self.horizon, device=self.device) + self.step
             nominal_sequence = feedforward[indices]
             self.ctrl.U[:] = (nominal_sequence + residual_sequence).clamp(
@@ -175,12 +204,15 @@ class UR5Tracker:
             )
             if self.device.type == "cuda":
                 torch.compiler.cudagraph_mark_step_begin()
+                torch.cuda.synchronize(self.device)
             solve_start = time.perf_counter()
             mppi_action = self.ctrl.command(
                 state, shift_nominal_trajectory=False
             ).clamp(
                 self.dynamics.u_min, self.dynamics.u_max
             )
+            if self.device.type == "cuda":
+                torch.cuda.synchronize(self.device)
             self.solve_time_history.append(time.perf_counter() - solve_start)
             optimized_residual = self.ctrl.U - nominal_sequence
             residual_sequence[:-1] = optimized_residual[1:].detach()
@@ -233,7 +265,8 @@ class UR5Tracker:
             self.dob_residual_history.append(self.dob.residual.cpu().numpy().copy())
             self.dob_model_torque_history.append(self.dob.tau_model.cpu().numpy().copy())
             if (simulation_step + 1) % 50 == 0:
-                print(f"  step {simulation_step + 1:>3}/{N_STEPS}  EE err={error_mm:.1f} mm")
+                print(f"  step {simulation_step + 1:>3}/{self.episode_steps}  "
+                      f"EE err={error_mm:.1f} mm")
 
         print(f"Mean EE err: {np.mean(error_history):.1f} mm  "
               f"Max: {np.max(error_history):.1f} mm")

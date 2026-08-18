@@ -33,10 +33,11 @@ from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
 
 from config import (B_DAMP, CROSS_EXP_K, CROSS_EXP_W, CROSS_EXP_ZONE,
                     CROSS_MARGIN, CROSS_RADIUS, DH_PARAMS, DQ_MAX, DT,
-                    GRAVITY, HORIZON, JOINT_ARMATURE, LINK_COM,
+                    GRAVITY, HORIZON, JOINT_ARMATURE, K_EXP, LINK_COM,
                     LINK_INERTIA_DIAG, LINK_MASSES,
-                    MASS_MATRIX_REGULARIZATION, N_STEPS, TAU_MAX,
-                    TIMING_WARMUP_STEPS, W_ACT, W_POS, W_TERM)
+                    MASS_MATRIX_REGULARIZATION, OBS_MARGIN, SOFT_ZONE,
+                    STATIC_OBSTACLE_SIZE, TAU_MAX,
+                    TIMING_WARMUP_STEPS, W_ACT, W_EXP, W_POS, W_TERM)
 from dynamics.ur5_dynamics import UR5Dynamics
 from kinematics.ur5_kinematics import fk_batch, ik_np, ik_trajectory_np
 from observers.dob import TorchDisturbanceObserver
@@ -48,6 +49,7 @@ SQP_W_POS = W_POS
 SQP_W_VEL = 2_000.0
 SQP_W_ACT = W_ACT
 SQP_W_TERM = W_TERM
+SQP_MIN_OBSTACLE_SLOTS = 2
 
 _ROOT = Path(__file__).resolve().parents[1]
 _ACADOS_OUT = _ROOT / "c_generated_code_ur5_sqp"
@@ -178,7 +180,7 @@ def _casadi_fk(q):
     return transform[:3, 3]
 
 
-def _obstacle_residual(ee, center, enabled):
+def _sphere_obstacle_residual(ee, center, enabled):
     distance = ca.sqrt(ca.sumsqr(ee - center) + 1e-8)
     outer_radius = CROSS_RADIUS + CROSS_MARGIN + CROSS_EXP_ZONE
     penetration = ca.fmax(outer_radius - distance, 0)
@@ -186,13 +188,23 @@ def _obstacle_residual(ee, center, enabled):
             * (ca.exp(0.5 * CROSS_EXP_K * penetration) - 1))
 
 
-def build_ur5_acados_ocp(x0: np.ndarray) -> AcadosOcp:
+def _box_obstacle_residual(ee, center, enabled):
+    outside = ca.fmax(ca.fabs(ee - center) - STATIC_OBSTACLE_SIZE / 2.0, 0)
+    distance = ca.sqrt(ca.sumsqr(outside) + 1e-8)
+    penetration = ca.fmax(OBS_MARGIN + SOFT_ZONE - distance, 0)
+    return (enabled * math.sqrt(W_EXP)
+            * (ca.exp(0.5 * K_EXP * penetration) - 1))
+
+
+def build_ur5_acados_ocp(
+        x0: np.ndarray, obstacle_slots: int = SQP_MIN_OBSTACLE_SLOTS) -> AcadosOcp:
     q = ca.SX.sym("q", 6)
     velocity = ca.SX.sym("dq", 6)
     state = ca.vertcat(q, velocity)
     torque = ca.SX.sym("tau", 6)
     state_dot = ca.SX.sym("xdot", 12)
-    obstacle_parameters = ca.SX.sym("obstacles", 7)  # center1, center2, enabled
+    # Each slot contains XYZ center, dynamic-sphere enable, static-box enable.
+    obstacle_parameters = ca.SX.sym("obstacles", 5 * obstacle_slots)
 
     mass_matrix, bias = _ca_mass_matrix_and_bias(q, velocity)
     acceleration = ca.solve(
@@ -203,13 +215,18 @@ def build_ur5_acados_ocp(x0: np.ndarray) -> AcadosOcp:
     ee = _casadi_fk(q)
     jacobian = ca.jacobian(ee, q)
     ee_velocity = jacobian @ velocity
-    obstacle_terms = ca.vertcat(
-        _obstacle_residual(ee, obstacle_parameters[:3], obstacle_parameters[6]),
-        _obstacle_residual(ee, obstacle_parameters[3:6], obstacle_parameters[6]),
-    )
+    obstacle_terms = []
+    for slot in range(obstacle_slots):
+        offset = 5 * slot
+        center = obstacle_parameters[offset:offset + 3]
+        obstacle_terms.append(
+            _sphere_obstacle_residual(ee, center, obstacle_parameters[offset + 3])
+            + _box_obstacle_residual(ee, center, obstacle_parameters[offset + 4])
+        )
+    obstacle_terms = ca.vertcat(*obstacle_terms)
 
     model = AcadosModel()
-    model.name = "ur5_nonlinear_sqp"
+    model.name = "ur5_nonlinear_sqp_obstacle_modes"
     model.x, model.u, model.xdot = state, torque, state_dot
     model.p = obstacle_parameters
     model.f_expl_expr = dynamics
@@ -221,20 +238,27 @@ def build_ur5_acados_ocp(x0: np.ndarray) -> AcadosOcp:
     ocp.model = model
     ocp.solver_options.N_horizon = SQP_HORIZON
     ocp.solver_options.tf = SQP_HORIZON * DT
-    ocp.parameter_values = np.zeros(7)
+    ocp.parameter_values = np.zeros(5 * obstacle_slots)
 
     ocp.cost.cost_type = "NONLINEAR_LS"
     ocp.cost.cost_type_e = "NONLINEAR_LS"
     ocp.cost.W = np.diag(
-        [SQP_W_POS] * 3 + [SQP_W_VEL] * 3 + [SQP_W_ACT] * 6 + [1.0, 1.0]
+        [SQP_W_POS] * 3 + [SQP_W_VEL] * 3 + [SQP_W_ACT] * 6
+        + [1.0] * obstacle_slots
     )
-    ocp.cost.W_e = np.diag([SQP_W_TERM] * 3 + [1.0, 1.0])
-    ocp.cost.yref = np.zeros(14)
-    ocp.cost.yref_e = np.zeros(5)
+    ocp.cost.W_e = np.diag(
+        [SQP_W_TERM] * 3 + [1.0] * obstacle_slots
+    )
+    ocp.cost.yref = np.zeros(12 + obstacle_slots)
+    ocp.cost.yref_e = np.zeros(3 + obstacle_slots)
 
     ocp.constraints.idxbx_0 = np.arange(12)
-    ocp.constraints.lbx_0 = x0.copy()
-    ocp.constraints.ubx_0 = x0.copy()
+    # Stage-0 bounds are replaced with the measured state before every solve.
+    # Use a canonical generated value so a different trajectory start does not
+    # invalidate otherwise identical acados generated code.
+    canonical_x0 = np.zeros_like(x0)
+    ocp.constraints.lbx_0 = canonical_x0
+    ocp.constraints.ubx_0 = canonical_x0
     ocp.constraints.idxbu = np.arange(6)
     ocp.constraints.lbu = -np.asarray(TAU_MAX)
     ocp.constraints.ubu = np.asarray(TAU_MAX)
@@ -256,15 +280,17 @@ def build_ur5_acados_ocp(x0: np.ndarray) -> AcadosOcp:
     ocp.solver_options.tol = 1e-4
     ocp.solver_options.qp_tol = 1e-4
     ocp.solver_options.print_level = 0
-    try:
-        ocp.code_gen_opts.code_export_directory = str(_ACADOS_OUT)
-    except AttributeError:
-        ocp.code_export_directory = str(_ACADOS_OUT)
+    ocp.code_gen_options.code_export_directory = str(_ACADOS_OUT)
+    ocp.code_gen_options.json_file = str(_ACADOS_OUT / _ACADOS_JSON)
     return ocp
 
 
 class UR5SQPTracker:
-    def __init__(self, waypoints: np.ndarray, dynamic_paths: np.ndarray | None = None):
+    def __init__(self, waypoints: np.ndarray,
+                 dynamic_paths: np.ndarray | None = None,
+                 static_centers: np.ndarray | None = None):
+        if dynamic_paths is not None and static_centers is not None:
+            raise ValueError("dynamic and static obstacles are mutually exclusive")
         self.original_count = len(waypoints)
         self.waypoints = np.vstack((waypoints, np.tile(
             waypoints[-1:], (SQP_HORIZON + 2, 1)
@@ -274,18 +300,32 @@ class UR5SQPTracker:
             reference_velocity[-1:], (SQP_HORIZON + 2, 1)
         )))
         self.dynamic_paths = dynamic_paths
+        self.static_centers = static_centers
+        requested_slots = (
+            len(dynamic_paths) if dynamic_paths is not None else
+            len(static_centers) if static_centers is not None else 0
+        )
+        self.obstacle_slots = max(SQP_MIN_OBSTACLE_SLOTS, requested_slots)
+        self.obstacle_mode = (
+            "dynamic" if dynamic_paths is not None else
+            "static" if static_centers is not None else "false"
+        )
         self.plant = UR5Dynamics(torch.device("cpu"), torch.float64)
         self.dob = TorchDisturbanceObserver(self.plant, DT)
 
     def _build_solver(self, initial_state: np.ndarray) -> AcadosOcpSolver:
-        print("[SQP] acados nonlinear OCP 생성/컴파일 중...")
+        print("[SQP] acados nonlinear OCP 준비 중 (호환 캐시 자동 재사용)...")
         start = time.perf_counter()
         solver = AcadosOcpSolver(
-            build_ur5_acados_ocp(initial_state),
-            json_file=_ACADOS_JSON,
+            build_ur5_acados_ocp(initial_state, self.obstacle_slots),
+            generate=False,
+            build=False,
+            check_reuse_possible=True,
             verbose=False,
         )
-        print(f"[SQP] solver ready: {time.perf_counter() - start:.2f} s")
+        cache_status = "재생성/컴파일" if solver.generated else "캐시 재사용"
+        print(f"[SQP] solver ready ({cache_status}): "
+              f"{time.perf_counter() - start:.2f} s")
         return solver
 
     def _feedforward(self, q0: np.ndarray):
@@ -300,11 +340,22 @@ class UR5SQPTracker:
         return joint, velocity, np.clip(torque.numpy(), -np.asarray(TAU_MAX), np.asarray(TAU_MAX))
 
     def _obstacle_parameter(self, simulation_step: int, horizon_step: int) -> np.ndarray:
-        if self.dynamic_paths is None:
-            return np.zeros(7)
-        path_index = min(simulation_step + horizon_step, self.dynamic_paths.shape[1] - 1)
-        return np.concatenate((self.dynamic_paths[0, path_index],
-                               self.dynamic_paths[1, path_index], [1.0]))
+        parameters = np.zeros(5 * self.obstacle_slots)
+        if self.dynamic_paths is not None:
+            path_index = min(
+                simulation_step + horizon_step,
+                self.dynamic_paths.shape[1] - 1,
+            )
+            for slot, path in enumerate(self.dynamic_paths):
+                offset = 5 * slot
+                parameters[offset:offset + 3] = path[path_index]
+                parameters[offset + 3] = 1.0
+        elif self.static_centers is not None:
+            for slot, center in enumerate(self.static_centers):
+                offset = 5 * slot
+                parameters[offset:offset + 3] = center
+                parameters[offset + 4] = 1.0
+        return parameters
 
     def run(self, q0: np.ndarray, has_disturbance: bool = False,
             use_dob: bool = False) -> dict:
@@ -330,11 +381,11 @@ class UR5SQPTracker:
         model_torque_history = [np.zeros(6)]
         solve_times_raw = []
 
-        print(f"SQP simulation: {N_STEPS} steps "
+        print(f"SQP simulation: {self.original_count} steps "
               f"(N={SQP_HORIZON}, max_iter={SQP_MAX_ITER}, "
               f"DOB={use_dob}, disturbance={has_disturbance}, "
-              f"obstacle={self.dynamic_paths is not None})")
-        for simulation_step in range(N_STEPS):
+              f"obstacle={self.obstacle_mode})")
+        for simulation_step in range(self.original_count):
             state_np = state.numpy()
             solver.set(0, "lbx", state_np)
             solver.set(0, "ubx", state_np)
@@ -342,11 +393,12 @@ class UR5SQPTracker:
                 reference_index = simulation_step + stage
                 yref = np.concatenate((self.waypoints[reference_index],
                                        self.reference_velocity[reference_index],
-                                       np.zeros(8)))
+                                       np.zeros(6 + self.obstacle_slots)))
                 solver.set(stage, "yref", yref)
                 solver.set(stage, "p", self._obstacle_parameter(simulation_step, stage))
             solver.set(SQP_HORIZON, "yref", np.concatenate((
-                self.waypoints[simulation_step + SQP_HORIZON], np.zeros(2)
+                self.waypoints[simulation_step + SQP_HORIZON],
+                np.zeros(self.obstacle_slots)
             )))
             solver.set(SQP_HORIZON, "p", self._obstacle_parameter(
                 simulation_step, SQP_HORIZON
@@ -393,7 +445,7 @@ class UR5SQPTracker:
             residual_history.append(self.dob.residual.numpy().copy())
             model_torque_history.append(self.dob.tau_model.numpy().copy())
             if (simulation_step + 1) % 50 == 0:
-                print(f"  step {simulation_step + 1:>3}/{N_STEPS}  "
+                print(f"  step {simulation_step + 1:>3}/{self.original_count}  "
                       f"EE err={error_mm:.1f} mm  solve={solve_time*1e3:.2f} ms")
 
         solve_times_raw = np.asarray(solve_times_raw)
@@ -412,18 +464,24 @@ class UR5SQPTracker:
             "elapsed": np.asarray(np.sum(solve_times_raw)),
             "has_disturbance": np.asarray(has_disturbance),
             "use_dob": np.asarray(use_dob),
-            "use_obstacle": np.asarray(self.dynamic_paths is not None),
+            "use_obstacle": np.asarray(self.obstacle_mode != "false"),
+            "obstacle_mode": np.asarray(self.obstacle_mode),
             "controller": np.asarray("sqp"),
             "dynamics_model": np.asarray("M(q)qdd+C(q,qd)qd+g(q)+Bqd=tau"),
             **({"cross_paths": self.dynamic_paths} if self.dynamic_paths is not None else {}),
+            **({"static_obstacle_centers": self.static_centers}
+               if self.static_centers is not None else {}),
         }
 
 
 def run_sqp(reference: np.ndarray, has_disturbance: bool = False,
             use_dob: bool = False,
-            dynamic_paths: np.ndarray | None = None) -> dict:
+            dynamic_paths: np.ndarray | None = None,
+            static_centers: np.ndarray | None = None) -> dict:
     hint = np.array([math.pi, -1.2, 1.2, -1.5, -1.57, 0.0])
     q0 = ik_np(reference[0], hint)
-    return UR5SQPTracker(reference, dynamic_paths=dynamic_paths).run(
+    return UR5SQPTracker(
+        reference, dynamic_paths=dynamic_paths, static_centers=static_centers
+    ).run(
         q0, has_disturbance=has_disturbance, use_dob=use_dob
     )

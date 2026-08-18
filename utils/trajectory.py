@@ -5,6 +5,8 @@ import math
 
 import numpy as np
 
+from config import STATIC_OBSTACLE_COUNT
+
 
 def circle(n: int, center: np.ndarray, radius: float) -> np.ndarray:
     phase = np.linspace(0, 2 * math.pi, n, endpoint=False)
@@ -54,7 +56,37 @@ def complex_3d_wave(n: int, c: np.ndarray, r: float) -> np.ndarray:
     return points
 
 
-TRAJECTORIES = {"circle": circle, "infinity": infinity, "rectangle": rectangle, "complex_3d_wave":complex_3d_wave}
+def multiscale_3d(n: int, center: np.ndarray, radius: float) -> np.ndarray:
+    """Generate a smooth 3D path with several competing spatial frequencies.
+
+    The low-frequency terms create the overall loop, while the higher
+    harmonics add alternating tight turns, direction reversals, and vertical
+    undulation.  The resulting path exercises nonlinear rollout optimization
+    without introducing discontinuous, physically unreasonable waypoint
+    jumps.
+    """
+    phase = np.linspace(0.0, 2.0 * math.pi, n, endpoint=False)
+    points = np.tile(np.asarray(center, dtype=float), (n, 1))
+
+    points[:, 0] += radius * (
+        0.72 * np.cos(phase) + 0.20 * np.cos(5.0 * phase)
+    )
+    points[:, 1] += radius * (
+        0.62 * np.sin(2.0 * phase) - 0.18 * np.sin(6.0 * phase)
+    )
+    points[:, 2] += radius * (
+        0.38 * np.sin(3.0 * phase) + 0.14 * np.sin(7.0 * phase)
+    )
+    return points
+
+
+TRAJECTORIES = {
+    "circle": circle,
+    "infinity": infinity,
+    "rectangle": rectangle,
+    "complex_3d_wave": complex_3d_wave,
+    "multiscale_3d": multiscale_3d,
+}
 
 
 def crossing_obstacle_paths(n_steps: int, center: np.ndarray) -> np.ndarray:
@@ -65,3 +97,22 @@ def crossing_obstacle_paths(n_steps: int, center: np.ndarray) -> np.ndarray:
     second = np.stack([np.full(n_steps, center[0]), 0.20 - 0.40 * phase,
                        np.full(n_steps, center[2])], axis=1)
     return np.stack([first, second]).astype(np.float32)
+
+
+def static_obstacle_centers(reference: np.ndarray,
+                            count: int = STATIC_OBSTACLE_COUNT) -> np.ndarray:
+    """Uniformly distribute ``count`` obstacles without using the start point.
+
+    The closed reference is split into ``count + 1`` equal progress gaps.  The
+    initial boundary is intentionally omitted, leaving the same-sized clear
+    gap on both sides of the trajectory start.
+    """
+    if count <= 0:
+        raise ValueError("static obstacle count must be positive")
+    reference = np.asarray(reference)
+    if count >= len(reference):
+        raise ValueError("static obstacle count must be smaller than reference length")
+    indices = np.floor(
+        np.arange(1, count + 1, dtype=float) * len(reference) / (count + 1)
+    ).astype(int)
+    return reference[indices].copy()

@@ -12,11 +12,11 @@ from pathlib import Path
 import matplotlib
 import numpy as np
 
-# This module is also an independent entry point, so configure the temporary
-# cache here as well. Repeated calls in the same process reuse one directory.
-from utils.torch_runtime import configure_temporary_inductor_cache
+# This module is also an independent entry point, so configure the persistent
+# workspace-local compilation cache here as well.
+from utils.torch_runtime import configure_compilation_cache
 
-configure_temporary_inductor_cache()
+configure_compilation_cache()
 
 
 class _SmallGpuTemplateWarningFilter(logging.Filter):
@@ -44,14 +44,18 @@ import matplotlib.pyplot as plt
 
 from config import (CROSS_EXP_K, CROSS_EXP_W, CROSS_EXP_ZONE, CROSS_MARGIN,
                     CROSS_RADIUS, DT, HORIZON_OBS, LAMBDA, MPPI_SEED,
-                    MPPI_W_POS, MPPI_W_TERM, N_STEPS, TIMING_WARMUP_STEPS,
+                    MPPI_STATIC_EXP_GAIN, MPPI_STATIC_EXP_WEIGHT,
+                    MPPI_STATIC_HORIZON, MPPI_STATIC_MARGIN,
+                    MPPI_STATIC_SAMPLES, MPPI_STATIC_ZONE, MPPI_W_POS,
+                    MPPI_W_TERM, N_STEPS, TIMING_WARMUP_STEPS,
                     TRAJ_CENTER, TRAJ_RADIUS)
 from controllers.mppi_dob_controller import UR5Tracker
 from costs.obstacle_cost import ObstacleCost
 from kinematics.ur5_kinematics import ik_np
 from utils.execution_config import (configuration_name,
                                     load_execution_config)
-from utils.trajectory import TRAJECTORIES, crossing_obstacle_paths
+from utils.trajectory import (TRAJECTORIES, crossing_obstacle_paths,
+                              static_obstacle_centers)
 from visualization.animator import animate_comparison
 from visualization.plotters import (LABELS, compute_metrics, plot_3d_trajectory,
                                     plot_result_dashboard, plot_timeseries)
@@ -103,12 +107,16 @@ def archive_previous_plots() -> Path | None:
     return archive
 
 
-def save_latest_plots(results: dict, reference: np.ndarray,
-                      show_obstacles: bool) -> dict[str, plt.Figure]:
+def save_latest_plots(results: dict, reference: np.ndarray, *,
+                      dynamic_paths: np.ndarray | None = None,
+                      static_centers: np.ndarray | None = None) -> dict[str, plt.Figure]:
     """Archive old plots and save all figures for the latest result under data/."""
     archive_previous_plots()
     figures = {
-        "trajectory": plot_3d_trajectory(results, reference, show_obstacles=show_obstacles),
+        "trajectory": plot_3d_trajectory(
+            results, reference, dynamic_paths=dynamic_paths,
+            static_centers=static_centers,
+        ),
         "timeseries": plot_timeseries(results),
         "dashboard": plot_result_dashboard(results),
     }
@@ -119,8 +127,8 @@ def save_latest_plots(results: dict, reference: np.ndarray,
     return figures
 
 
-def waypoints(name: str = "circle") -> np.ndarray:
-    return TRAJECTORIES[name](N_STEPS, TRAJ_CENTER, TRAJ_RADIUS)
+def waypoints(name: str = "circle", n_steps: int = N_STEPS) -> np.ndarray:
+    return TRAJECTORIES[name](n_steps, TRAJ_CENTER, TRAJ_RADIUS)
 
 
 def device() -> torch.device:
@@ -134,22 +142,40 @@ def initial_configuration(reference: np.ndarray, target_device: torch.device) ->
 
 def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
              use_dob: bool = False,
-             dynamic_paths: np.ndarray | None = None, *,
+             dynamic_paths: np.ndarray | None = None,
+             static_centers: np.ndarray | None = None, *,
              seed: int = MPPI_SEED,
              n_samples: int | None = None,
+             horizon: int | None = None,
              temperature: float = LAMBDA,
              position_weight: float = MPPI_W_POS,
-             terminal_weight: float = MPPI_W_TERM) -> dict:
+             terminal_weight: float = MPPI_W_TERM,
+             smooth_weight: float | None = None,
+             static_exp_weight: float = MPPI_STATIC_EXP_WEIGHT,
+             static_exp_gain: float = MPPI_STATIC_EXP_GAIN,
+             static_margin: float = MPPI_STATIC_MARGIN,
+             static_zone: float = MPPI_STATIC_ZONE) -> dict:
     # MPPI is stochastic. A fixed seed makes controller tuning comparisons
     # reproducible while leaving the sampled-control algorithm unchanged.
     torch.manual_seed(seed)
     target_device = device()
     simulation_dtype = torch.float32
     obstacle = None
-    if dynamic_paths is not None:
+    default_horizon = (MPPI_STATIC_HORIZON
+                       if static_centers is not None else HORIZON_OBS)
+    controller_horizon = default_horizon if horizon is None else horizon
+    controller_samples = (MPPI_STATIC_SAMPLES
+                          if static_centers is not None and n_samples is None
+                          else n_samples)
+    if dynamic_paths is not None or static_centers is not None:
         obstacle = ObstacleCost(
-            HORIZON_OBS, target_device, simulation_dtype,
+            controller_horizon, target_device, simulation_dtype,
             dynamic_paths=dynamic_paths,
+            static_centers=static_centers,
+            static_exp_weight=static_exp_weight,
+            static_exp_gain=static_exp_gain,
+            static_margin=static_margin,
+            static_zone=static_zone,
             safe_radius=CROSS_RADIUS + CROSS_MARGIN,
             exp_weight=CROSS_EXP_W,
             exp_gain=CROSS_EXP_K,
@@ -157,9 +183,10 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         )
     tracker = UR5Tracker(
         reference, target_device, dtype=simulation_dtype,
-        obstacle_cost=obstacle, n_samples=n_samples,
+        obstacle_cost=obstacle, n_samples=controller_samples,
+        horizon=controller_horizon if obstacle is not None else horizon,
         temperature=temperature, position_weight=position_weight,
-        terminal_weight=terminal_weight,
+        terminal_weight=terminal_weight, smooth_weight=smooth_weight,
     )
     start = time.perf_counter()
     q, ee, control, error_mm, _, estimate, actual = tracker.run(
@@ -183,14 +210,27 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         "elapsed": np.asarray(elapsed),
         "has_disturbance": np.asarray(has_disturbance),
         "use_dob": np.asarray(use_dob),
-        "use_obstacle": np.asarray(dynamic_paths is not None),
+        "use_obstacle": np.asarray(obstacle is not None),
+        "obstacle_mode": np.asarray(
+            "dynamic" if dynamic_paths is not None else
+            "static" if static_centers is not None else "false"
+        ),
         "mppi_seed": np.asarray(seed),
+        "mppi_horizon": np.asarray(tracker.horizon),
+        "mppi_samples": np.asarray(tracker.n_samples),
         "mppi_temperature": np.asarray(temperature),
         "mppi_position_weight": np.asarray(position_weight),
         "mppi_terminal_weight": np.asarray(terminal_weight),
+        "mppi_smooth_weight": np.asarray(tracker.tracking_cost.smooth_weight),
+        "static_exp_weight": np.asarray(static_exp_weight),
+        "static_exp_gain": np.asarray(static_exp_gain),
+        "static_margin": np.asarray(static_margin),
+        "static_zone": np.asarray(static_zone),
         "controller": np.asarray("mppi"),
         "dynamics_model": np.asarray("M(q)qdd+C(q,qd)qd+g(q)+Bqd=tau"),
         **({"cross_paths": dynamic_paths} if dynamic_paths is not None else {}),
+        **({"static_obstacle_centers": static_centers}
+           if static_centers is not None else {}),
     }
 
 
@@ -208,22 +248,30 @@ def _comparison_cases(settings: dict) -> list[tuple[str, bool]]:
 
 def _run_controller(controller: str, reference: np.ndarray,
                     has_disturbance: bool, use_dob: bool,
-                    dynamic_paths: np.ndarray | None) -> dict:
+                    dynamic_paths: np.ndarray | None,
+                    static_centers: np.ndarray | None) -> dict:
     if controller == "mppi":
         return run_mppi(reference, has_disturbance=has_disturbance,
-                        use_dob=use_dob, dynamic_paths=dynamic_paths)
+                        use_dob=use_dob, dynamic_paths=dynamic_paths,
+                        static_centers=static_centers)
     from controllers.sqp import run_sqp
 
     return run_sqp(reference, has_disturbance=has_disturbance,
-                   use_dob=use_dob, dynamic_paths=dynamic_paths)
+                   use_dob=use_dob, dynamic_paths=dynamic_paths,
+                   static_centers=static_centers)
 
 
 def run_comparison(settings: dict, reference: np.ndarray
-                   ) -> tuple[dict, np.ndarray | None]:
+                   ) -> tuple[dict, np.ndarray | None, np.ndarray | None]:
     """Run exactly two cases under identical environment conditions."""
+    obstacle_mode = settings["obstacle_mode"]
     paths = (crossing_obstacle_paths(
-        N_STEPS + HORIZON_OBS + 2, TRAJ_CENTER
-    ) if settings["use_obstacle"] else None)
+        len(reference) + HORIZON_OBS + 2, TRAJ_CENTER
+    ) if obstacle_mode == "dynamic" else None)
+    static_centers = (static_obstacle_centers(
+        reference, settings["static_obstacle_count"]
+    )
+                      if obstacle_mode == "static" else None)
     results = {}
     for controller, use_dob in _comparison_cases(settings):
         key = _result_key(controller, use_dob)
@@ -231,22 +279,25 @@ def run_comparison(settings: dict, reference: np.ndarray
               f"controller={controller.upper()}, "
               f"disturbance={'ON' if settings['has_disturbance'] else 'OFF'}, "
               f"DOB={'ON' if use_dob else 'OFF'}, "
-              f"obstacle={'ON' if settings['use_obstacle'] else 'OFF'}, "
+              f"obstacle={obstacle_mode.upper()}, "
+              f"T_SIM={settings['t_sim']:g}s, "
+              f"static_count={settings['static_obstacle_count']}, "
               f"trajectory={settings['trajectory']}")
         data = _run_controller(
             controller, reference,
             has_disturbance=settings["has_disturbance"],
             use_dob=use_dob,
             dynamic_paths=paths,
+            static_centers=static_centers,
         )
         destination = NPZ_DIR / configuration_name(
             controller, settings["has_disturbance"], use_dob,
-            settings["use_obstacle"], settings["trajectory"]
+            obstacle_mode, settings["trajectory"]
         )
         np.savez(destination, **data)
         print(f"[SAVE] {key}: {destination}")
         results[key] = data
-    return results, paths
+    return results, paths, static_centers
 
 
 def command_line() -> argparse.Namespace:
@@ -265,8 +316,8 @@ def main() -> None:
         raise SystemExit("run_comparison.py requires mode=comparison in config.txt")
     print(f"[CONFIG] {args.config.resolve()}")
     prepare_data_directories()
-    reference = waypoints(settings["trajectory"])
-    results, paths = run_comparison(settings, reference)
+    reference = waypoints(settings["trajectory"], settings["n_steps"])
+    results, paths, static_centers = run_comparison(settings, reference)
     print("\n결과 요약")
     for key, data in results.items():
         metrics = compute_metrics(data)
@@ -278,9 +329,12 @@ def main() -> None:
               f"WorstT={metrics['worst_solve_ms']:.2f} ms")
 
     saved_figures = save_latest_plots(
-        results, reference, show_obstacles=settings["use_obstacle"]
+        results, reference, dynamic_paths=paths, static_centers=static_centers
     )
-    figure, anim = animate_comparison(results, reference, moving_obstacle_paths=paths)
+    figure, anim = animate_comparison(
+        results, reference, moving_obstacle_paths=paths,
+        static_obstacle_centers=static_centers,
+    )
     globals().update(_LIVE_FIGURE=figure, _LIVE_ANIMATION=anim,
                      _SAVED_FIGURES=saved_figures)
     plt.show()
