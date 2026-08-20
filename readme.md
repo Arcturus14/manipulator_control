@@ -10,7 +10,7 @@ UR5 6축 매니퓰레이터의 Cartesian 궤적 추종 성능을 시뮬레이션
 - GPU 가속 MPPI와 acados 기반 Full-SQP 제어
 - 원(circle), 8자(infinity), 사각형(rectangle), 3D 파동(complex_3d_wave), 다중 스케일 3D(multiscale_3d) 말단 궤적 추종
 - 정현파 토크 외란과 1차 Q-filter DOB 보상
-- 서로 반대 방향으로 교차하는 두 동적 구형 장애물 또는 기준 궤적에
+- 기준 궤적 반대편에서 4.6배속으로 추격하는 10 mm 동적 정육면체 또는 기준 궤적에
   균등 배치되는 10 mm 정적 정육면체 장애물
 - 단일 조건 실행 또는 다음 두 조건 비교
   - MPPI vs SQP

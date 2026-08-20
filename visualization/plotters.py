@@ -5,7 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-from config import DT, STATIC_OBSTACLE_SIZE, TIMING_WARMUP_STEPS
+from config import (DT, DYNAMIC_OBSTACLE_SIZE, STATIC_OBSTACLE_SIZE,
+                    TIMING_WARMUP_STEPS)
 
 LABELS = {"MPPI": "MPPI", "MPPI_DOB": "MPPI + DOB",
           "MPPI_CROSS": "MPPI", "MPPI_DOB_CROSS": "MPPI + DOB",
@@ -73,6 +74,37 @@ def assess_static_obstacles(ee: np.ndarray, centers: np.ndarray,
             "clearance_mm": min(minimum, 0.0) * 1e3 if contact else minimum * 1e3,
         })
     return assessments
+
+
+def assess_dynamic_obstacle(ee: np.ndarray, path: np.ndarray,
+                            size: float = DYNAMIC_OBSTACLE_SIZE) -> dict:
+    """Return continuous relative-motion contact and cube clearance.
+
+    Both the EE and obstacle center are linearly interpolated between matching
+    samples. Their difference is therefore tested against a stationary cube.
+    """
+    ee = np.asarray(ee, dtype=float)
+    path = np.asarray(path, dtype=float)
+    count = min(len(ee), len(path))
+    if count == 0:
+        raise ValueError("EE and dynamic obstacle paths must not be empty")
+    relative = ee[:count] - path[:count]
+    half = size / 2.0
+    dense = _densify_polyline(relative, max_spacing=size / 100.0)
+    delta = np.abs(dense)
+    outside_distance = np.linalg.norm(np.maximum(delta - half, 0.0), axis=1)
+    inside = np.all(delta <= half, axis=1)
+    signed_clearance = outside_distance
+    signed_clearance[inside] = -np.min(half - delta[inside], axis=1)
+    contact = any(
+        _segment_intersects_box(start, end, -np.full(3, half), np.full(3, half))
+        for start, end in zip(relative[:-1], relative[1:])
+    ) or bool(np.any(np.all(delta <= half, axis=1)))
+    clearance = float(signed_clearance.min())
+    return {
+        "contact": contact,
+        "clearance_mm": clearance * 1e3,
+    }
 
 
 def _set_equal_3d_scale(axis, arrays: list[np.ndarray]) -> None:
@@ -156,8 +188,11 @@ def plot_3d_trajectory(results: dict, waypoints: np.ndarray, *,
                        dynamic_paths: np.ndarray | None = None,
                        static_centers: np.ndarray | None = None):
     has_static = static_centers is not None
-    fig = plt.figure(figsize=(11.2 if has_static else 7.4, 6.2), facecolor=FIG_BG)
-    if has_static:
+    has_dynamic = dynamic_paths is not None
+    has_assessment = has_static or has_dynamic
+    fig = plt.figure(figsize=(11.2 if has_assessment else 7.4, 6.2),
+                     facecolor=FIG_BG)
+    if has_assessment:
         grid = fig.add_gridspec(1, 2, width_ratios=(3.2, 1.65), wspace=0.04)
         axis = fig.add_subplot(grid[0, 0], projection="3d")
         assessment_axis = fig.add_subplot(grid[0, 1])
@@ -171,8 +206,46 @@ def plot_3d_trajectory(results: dict, waypoints: np.ndarray, *,
         ee = data["ee"]
         axis.plot(*ee.T, label=LABELS.get(key, key), color=COLORS.get(key), lw=2)
     if dynamic_paths is not None:
-        for index, path in enumerate(dynamic_paths):
-            axis.plot(*path.T, ":", lw=1.8, label=f"Obstacle {index + 1}")
+        dynamic_path = np.asarray(dynamic_paths)[0]
+        axis.plot(*dynamic_path.T, ":", lw=1.8, label="Dynamic obstacle")
+        assessments = {
+            key: assess_dynamic_obstacle(data["ee"], dynamic_path)
+            for key, data in results.items()
+        }
+        rows, row_colors = [], []
+        for key, assessment in assessments.items():
+            contact = assessment["contact"]
+            rows.append([
+                "O1", LABELS.get(key, key),
+                "CONTACT" if contact else "CLEAR",
+                f"{assessment['clearance_mm']:+.2f} mm",
+            ])
+            row_colors.append([
+                "#ffffff", "#ffffff",
+                "#fecaca" if contact else "#bbf7d0",
+                "#fecaca" if contact else "#bbf7d0",
+            ])
+        assessment_axis.set_title(
+            "Dynamic obstacle contact check\n"
+            f"EE point vs {DYNAMIC_OBSTACLE_SIZE * 1e3:g} mm cube",
+            fontsize=11, fontweight="bold", pad=14,
+        )
+        table = assessment_axis.table(
+            cellText=rows,
+            colLabels=["ID", "Run", "Result", "Min clearance"],
+            cellColours=row_colors,
+            colColours=["#e5e7eb"] * 4,
+            cellLoc="center", colLoc="center", loc="center",
+            colWidths=[0.13, 0.29, 0.27, 0.31],
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(8.5)
+        table.scale(1.0, 1.45)
+        assessment_axis.text(
+            0.5, 0.12, "Negative clearance = penetration",
+            transform=assessment_axis.transAxes, ha="center",
+            fontsize=8.5, color=MUTED,
+        )
     if static_centers is not None:
         half = STATIC_OBSTACLE_SIZE / 2.0
         for index, center in enumerate(static_centers):
@@ -231,7 +304,7 @@ def plot_3d_trajectory(results: dict, waypoints: np.ndarray, *,
     _set_equal_3d_scale(axis, scale_arrays)
     axis.view_init(elev=25, azim=-55)
     axis.legend(frameon=False)
-    if not has_static:
+    if not has_assessment:
         fig.tight_layout()
     return fig
 

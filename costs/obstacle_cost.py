@@ -4,7 +4,8 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from config import (CROSS_EXP_K, CROSS_EXP_W, CROSS_EXP_ZONE, CROSS_SAFE_RADIUS,
+from config import (CROSS_EXP_K, CROSS_EXP_W, CROSS_EXP_ZONE, CROSS_MARGIN,
+                    DYNAMIC_OBSTACLE_SIZE,
                     MPPI_STATIC_EXP_GAIN, MPPI_STATIC_EXP_WEIGHT,
                     MPPI_STATIC_MARGIN, MPPI_STATIC_ZONE,
                     STATIC_OBSTACLE_SIZE)
@@ -22,13 +23,15 @@ class ObstacleCost(BaseCost):
                  static_zone: float = MPPI_STATIC_ZONE,
                  static_exp_weight: float = MPPI_STATIC_EXP_WEIGHT,
                  static_exp_gain: float = MPPI_STATIC_EXP_GAIN,
-                 safe_radius: float = CROSS_SAFE_RADIUS,
+                 dynamic_size: float = DYNAMIC_OBSTACLE_SIZE,
+                 dynamic_margin: float = CROSS_MARGIN,
                  exp_weight: float = CROSS_EXP_W,
                  exp_gain: float = CROSS_EXP_K,
                  exp_zone: float = CROSS_EXP_ZONE):
         self.horizon = horizon
         self.episode_step = 0
-        self.safe_radius = safe_radius
+        self.dynamic_half_size = dynamic_size / 2.0
+        self.dynamic_margin = dynamic_margin
         self.exp_weight, self.exp_gain, self.exp_zone = exp_weight, exp_gain, exp_zone
         if dynamic_paths is not None and static_centers is not None:
             raise ValueError("dynamic and static obstacles are mutually exclusive")
@@ -49,10 +52,14 @@ class ObstacleCost(BaseCost):
         if self.dynamic_paths is not None:
             path_index = min(self.episode_step + step, self.dynamic_paths.shape[1] - 1)
             centers = self.dynamic_paths[:, path_index, :]
-            distance = torch.linalg.vector_norm(
-                ee[:, None, :] - centers[None, :, :], dim=2
-            ).clamp_min(1e-8)
-            penetration = torch.relu(self.safe_radius + self.exp_zone - distance)
+            outside = torch.relu(
+                torch.abs(ee[:, None, :] - centers[None, :, :])
+                - self.dynamic_half_size
+            )
+            distance = torch.linalg.vector_norm(outside, dim=2)
+            penetration = torch.relu(
+                self.dynamic_margin + self.exp_zone - distance
+            )
             return (
                 self.exp_weight * torch.expm1(self.exp_gain * penetration)
             ).sum(dim=1)

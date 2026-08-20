@@ -9,16 +9,15 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from config import (DT, MPPI_W_POS, MPPI_W_TERM, N_SAMPLES, TAU_MAX,
-                    W_POS, W_TERM)
+from config import DT, MPPI_W_POS, MPPI_W_TERM, N_SAMPLES, TAU_MAX
 from run_comparison import run_mppi, waypoints
 
 
 CASES = {
     "baseline": {
         "temperature": 0.45,
-        "position_weight": W_POS,
-        "terminal_weight": W_TERM,
+        "position_weight": 120_000.0,
+        "terminal_weight": 300_000.0,
     },
     "tuned": {
         "temperature": 0.2,

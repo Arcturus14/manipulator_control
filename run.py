@@ -30,13 +30,12 @@ logging.getLogger("torch._inductor.utils").addFilter(
 import matplotlib.pyplot as plt
 import numpy as np
 
-from config import (HORIZON_OBS, N_STEPS, STATIC_OBSTACLE_COUNT, TRAJ_CENTER,
-                    T_SIM)
+from config import HORIZON_OBS, N_STEPS, STATIC_OBSTACLE_COUNT, T_SIM
 from run_comparison import (NPZ_DIR, compute_metrics, prepare_data_directories,
                             run_mppi, save_latest_plots, waypoints)
 from utils.execution_config import (configuration_name,
                                     load_execution_config)
-from utils.trajectory import (TRAJECTORIES, crossing_obstacle_paths,
+from utils.trajectory import (TRAJECTORIES, chasing_obstacle_paths,
                               static_obstacle_centers)
 from visualization.animator import animate_comparison
 
@@ -108,9 +107,7 @@ def main() -> None:
     trajectory = settings["trajectory"]
 
     reference = waypoints(trajectory, settings["n_steps"])
-    paths = (crossing_obstacle_paths(
-        len(reference) + HORIZON_OBS + 2, TRAJ_CENTER
-    )
+    paths = (chasing_obstacle_paths(reference, HORIZON_OBS + 2)
              if obstacle_mode == "dynamic" else None)
     static_centers = (static_obstacle_centers(
         reference, settings["static_obstacle_count"]

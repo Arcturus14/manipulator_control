@@ -5,7 +5,8 @@ import math
 
 import numpy as np
 
-from config import STATIC_OBSTACLE_COUNT
+from config import (DYNAMIC_OBSTACLE_PHASE_OFFSET,
+                    DYNAMIC_OBSTACLE_SPEED_RATIO, STATIC_OBSTACLE_COUNT)
 
 
 def circle(n: int, center: np.ndarray, radius: float) -> np.ndarray:
@@ -89,14 +90,36 @@ TRAJECTORIES = {
 }
 
 
-def crossing_obstacle_paths(n_steps: int, center: np.ndarray) -> np.ndarray:
-    """Generate two spheres crossing in opposite Y directions."""
-    phase = np.linspace(0.0, 1.0, n_steps)
-    first = np.stack([np.full(n_steps, center[0]), -0.20 + 0.40 * phase,
-                      np.full(n_steps, center[2])], axis=1)
-    second = np.stack([np.full(n_steps, center[0]), 0.20 - 0.40 * phase,
-                       np.full(n_steps, center[2])], axis=1)
-    return np.stack([first, second]).astype(np.float32)
+def chasing_obstacle_paths(
+        reference: np.ndarray, extra_steps: int = 0, *,
+        speed_ratio: float = DYNAMIC_OBSTACLE_SPEED_RATIO,
+        phase_offset: float = DYNAMIC_OBSTACLE_PHASE_OFFSET) -> np.ndarray:
+    """Move one obstacle cyclically along ``reference`` faster than the robot.
+
+    The robot advances one reference sample per control step.  The obstacle
+    starts half a cycle away by default and advances ``speed_ratio`` samples
+    per step in the same direction, so it periodically catches the robot from
+    behind. Fractional indices are linearly interpolated on the closed path.
+    """
+    reference = np.asarray(reference, dtype=float)
+    if reference.ndim != 2 or reference.shape[1] != 3 or len(reference) < 2:
+        raise ValueError("reference must have shape (N, 3) with N >= 2")
+    if extra_steps < 0:
+        raise ValueError("extra_steps must be non-negative")
+    if speed_ratio <= 1.0:
+        raise ValueError("speed_ratio must be greater than 1 for chasing")
+    if not 0.0 <= phase_offset < 1.0:
+        raise ValueError("phase_offset must be in [0, 1)")
+
+    count = len(reference)
+    steps = np.arange(count + extra_steps, dtype=float)
+    indices = (phase_offset * count + speed_ratio * steps) % count
+    lower = np.floor(indices).astype(int)
+    fraction = indices - lower
+    upper = (lower + 1) % count
+    path = ((1.0 - fraction[:, None]) * reference[lower]
+            + fraction[:, None] * reference[upper])
+    return path[None, ...].astype(np.float32)
 
 
 def static_obstacle_centers(reference: np.ndarray,

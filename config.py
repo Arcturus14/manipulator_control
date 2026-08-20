@@ -86,27 +86,31 @@ MPPI_STATIC_EXP_GAIN = 500.0
 MPPI_STATIC_MARGIN = 0.002
 MPPI_STATIC_ZONE = 0.004
 
-# SQP position cost weights are kept separate so MPPI tuning does not change
-# the deterministic controller used as the comparison baseline.
-W_POS = 120_000.0
-W_TERM = 300_000.0
+# SQP uses the same mathematical cost terms as MPPI.  These weights remain
+# separate because the deterministic local optimizer and the sampling-based
+# optimizer generally need different numerical scaling.
+SQP_W_POS = 960_000.0
+SQP_W_TERM = 2_400_000.0
+SQP_W_ACT = 0.0005
+SQP_W_VEL = 5.0
+SQP_W_SMOOTH = 0.0001
+SQP_W_SMOOTH_OBS = 0.0001
+SQP_STATIC_EXP_WEIGHT = 8_250.0
+SQP_CROSS_EXP_WEIGHT = 8_500.0
 
 # Static obstacles generated from the selected reference trajectory
 STATIC_OBSTACLE_SIZE = 0.010
 STATIC_OBSTACLE_COUNT = 4
-# SQP static-cube residual baseline (kept separate from MPPI tuning)
-W_EXP = 5e3
-K_EXP = 1.5
-OBS_MARGIN = 0.05
-SOFT_ZONE = 0.03
-
-# Dynamic crossing obstacles
-CROSS_SAFE_RADIUS = 0.056
-CROSS_EXP_W = 160.0
+# Dynamic trajectory-chasing cube
+# MPPI and SQP keep separate barrier weights because their optimizers have
+# different numerical scaling; the gain, zone, margin, and geometry are shared.
+CROSS_EXP_W = 1_400.0
 CROSS_EXP_K = 38.0
 CROSS_EXP_ZONE = 0.012
-CROSS_RADIUS = 0.030
 CROSS_MARGIN = 0.026
+DYNAMIC_OBSTACLE_SIZE = 0.010
+DYNAMIC_OBSTACLE_SPEED_RATIO = 4.6
+DYNAMIC_OBSTACLE_PHASE_OFFSET = 0.5
 
 # Reference trajectory and disturbance
 TRAJ_CENTER = np.array([0.40, 0.0, 0.35])

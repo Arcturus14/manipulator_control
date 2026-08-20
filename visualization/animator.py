@@ -4,7 +4,8 @@ from __future__ import annotations
 import numpy as np
 import matplotlib.pyplot as plt
 
-from config import CROSS_MARGIN, CROSS_RADIUS, DT, STATIC_OBSTACLE_SIZE
+from config import (CROSS_MARGIN, DT, DYNAMIC_OBSTACLE_SIZE,
+                    STATIC_OBSTACLE_SIZE)
 from kinematics.ur5_kinematics import fk_joints_np
 from .plotters import COLORS, LABELS
 
@@ -12,17 +13,9 @@ LINK_COLORS = ["#003f8a", "#1560bd", "#2878d8", "#4a94e8", "#70b0f0", "#98ccff"]
 OBSTACLE_COLORS = ["#ff4400", "#0044ff"]
 
 
-def _sphere_wireframe(axis, center, radius, color):
-    u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:10j]
-    x = center[0] + radius * np.cos(u) * np.sin(v)
-    y = center[1] + radius * np.sin(u) * np.sin(v)
-    z = center[2] + radius * np.cos(v)
-    return axis.plot_wireframe(x, y, z, color=color, linewidth=0.5, alpha=0.55)
-
-
 def animate_comparison(results: dict, waypoints: np.ndarray,
                        moving_obstacle_paths: np.ndarray | None = None,
-                       moving_obstacle_radius: float = CROSS_RADIUS,
+                       moving_obstacle_size: float = DYNAMIC_OBSTACLE_SIZE,
                        static_obstacle_centers: np.ndarray | None = None):
     """Create an interactive arm animation and return ``(figure, animation)``."""
     from matplotlib import animation
@@ -71,15 +64,18 @@ def animate_comparison(results: dict, waypoints: np.ndarray,
             if moving_obstacle_paths is not None:
                 obstacle_frame = min(frame, moving_obstacle_paths.shape[1] - 1)
                 for obstacle_index, path in enumerate(moving_obstacle_paths):
-                    obstacle_artists[index].append(_sphere_wireframe(
-                        axis, path[obstacle_frame], moving_obstacle_radius,
-                        OBSTACLE_COLORS[obstacle_index % len(OBSTACLE_COLORS)]))
                     center = path[obstacle_frame]
-                    theta = np.linspace(0, 2*np.pi, 50)
-                    obstacle_artists[index].append(axis.plot(
-                        center[0] + (moving_obstacle_radius + CROSS_MARGIN) * np.cos(theta),
-                        center[1] + (moving_obstacle_radius + CROSS_MARGIN) * np.sin(theta),
-                        np.full_like(theta, center[2]), "--", alpha=0.25)[0])
+                    color = OBSTACLE_COLORS[obstacle_index % len(OBSTACLE_COLORS)]
+                    half = moving_obstacle_size / 2.0
+                    obstacle_artists[index].append(axis.bar3d(
+                        *(center - half), *([moving_obstacle_size] * 3),
+                        color=color, alpha=0.75,
+                    ))
+                    safe_size = moving_obstacle_size + 2.0 * CROSS_MARGIN
+                    obstacle_artists[index].append(axis.bar3d(
+                        *(center - safe_size / 2.0), *([safe_size] * 3),
+                        color=color, alpha=0.06,
+                    ))
         return []
 
     frame_count = max(len(data["q"]) for data in results.values())
