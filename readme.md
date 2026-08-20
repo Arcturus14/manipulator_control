@@ -2,7 +2,7 @@
 
 UR5 6축 매니퓰레이터의 Cartesian 궤적 추종 성능을 시뮬레이션하고, **MPPI(Model Predictive Path Integral)** 와 **비선형 SQP(Sequential Quadratic Programming)** 제어기를 비교하는 프로젝트입니다. 외란, DOB(Disturbance Observer), 이동 장애물을 각각 켜고 끌 수 있으며 실행 결과를 수치 데이터, 정적 그래프, 3D 애니메이션으로 저장·표시합니다.
 
-![성능 지표 예시](docs/images/metrics_dashboard.png)
+![최종 궤적 예시](docs/images/final_trajectory.png)
 
 ## 주요 기능
 

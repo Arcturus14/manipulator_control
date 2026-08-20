@@ -15,7 +15,7 @@ use_disturbance = true
 # Total trajectory traversal/simulation time in seconds. DT remains 0.02 s.
 T_SIM = 10.0
 # Obstacle mode: Dynamic, Static, or False.
-USE_OBSTACLES = Dynamic
+USE_OBSTACLES = Static
 # Static obstacles are distributed uniformly over the trajectory, excluding
 # the initial reference position.
 STATIC_OBSTACLE_COUNT = 5
