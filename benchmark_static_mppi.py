@@ -1,7 +1,6 @@
 """Evaluate MPPI parameter candidates on reference-indexed static cubes."""
 from __future__ import annotations
 
-import argparse
 import gc
 import json
 from pathlib import Path
@@ -10,7 +9,7 @@ import numpy as np
 import torch
 
 from config import N_SAMPLES, TAU_MAX
-from run_comparison import run_mppi, waypoints
+from experiment_runner import run_mppi, waypoints
 from utils.trajectory import static_obstacle_centers
 from visualization.plotters import assess_static_obstacles, compute_metrics
 
@@ -83,30 +82,22 @@ def summarize(data: dict, centers: np.ndarray) -> dict:
     }
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cases", nargs="+", choices=CASES,
-                        default=list(CASES))
-    parser.add_argument("--trajectories", nargs="+", default=["infinity"])
-    parser.add_argument("--seeds", nargs="+", type=int, default=[7])
-    parser.add_argument("--output", type=Path)
-    parser.add_argument("--save-result", type=Path,
-                        help="save NPZ data; requires exactly one case and seed")
-    args = parser.parse_args()
-    if args.save_result and (len(args.cases) != 1 or len(args.seeds) != 1
-                             or len(args.trajectories) != 1):
-        parser.error(
-            "--save-result requires exactly one trajectory, case, and seed"
-        )
+def run_benchmark(*, cases: list[str], trajectories: list[str], seeds: list[int],
+                  output: Path, save_result: Path | None = None) -> None:
+    unknown = set(cases) - CASES.keys()
+    if unknown:
+        raise ValueError(f"Unknown static benchmark cases: {sorted(unknown)}")
+    if save_result and (len(cases) != 1 or len(seeds) != 1 or len(trajectories) != 1):
+        raise ValueError("Saving benchmark NPZ requires one trajectory, case, and seed")
 
     rows = []
     print(f"device={'cuda' if torch.cuda.is_available() else 'cpu'}, "
           f"default_samples={N_SAMPLES}")
-    for trajectory in args.trajectories:
+    for trajectory in trajectories:
         reference = waypoints(trajectory)
         centers = static_obstacle_centers(reference)
-        for seed in args.seeds:
-            for name in args.cases:
+        for seed in seeds:
+            for name in cases:
                 print(f"\n[TUNE] {trajectory}, {name}, seed={seed}")
                 parameters = CASES[name]
                 data = run_mppi(
@@ -122,24 +113,20 @@ def main() -> None:
                 }
                 rows.append(row)
                 print(json.dumps(row, indent=2))
-                if args.save_result:
-                    args.save_result.parent.mkdir(parents=True, exist_ok=True)
-                    np.savez(args.save_result, **data)
-                    print(f"[SAVE] {args.save_result}")
+                if save_result:
+                    save_result.parent.mkdir(parents=True, exist_ok=True)
+                    np.savez(save_result, **data)
+                    print(f"[SAVE] {save_result}")
                 del data
                 gc.collect()
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
     report = {
-        "trajectories": args.trajectories,
-        "seeds": args.seeds,
+        "trajectories": trajectories,
+        "seeds": seeds,
         "rows": rows,
     }
-    if args.output:
-        args.output.write_text(json.dumps(report, indent=2) + "\n")
-        print(f"[SAVE] {args.output}")
-
-
-if __name__ == "__main__":
-    main()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(f"[SAVE] {output}")

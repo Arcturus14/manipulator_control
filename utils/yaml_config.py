@@ -93,52 +93,52 @@ def validate_config(cfg: dict[str, Any]) -> None:
         raise ValueError("obstacle.count must be smaller than the step count in static mode")
 
 
-def apply_to_legacy_constants(cfg: dict[str, Any]) -> None:
+def apply_runtime_config(cfg: dict[str, Any]) -> None:
     """Apply YAML values before importing modules that bind config constants."""
-    import config as legacy
+    import config as runtime
 
     robot, sim = cfg["robot"], cfg["simulation"]
     ctrl, costs = cfg["controller"], cfg["cost"]
     obs, experiment = cfg["obstacle"], cfg["experiment"]
-    legacy.TAU_MAX = tuple(float(v) for v in robot["torque_limit"])
-    legacy.DQ_MAX = float(robot["velocity_limit"])
-    legacy.B_DAMP = tuple(float(v) for v in robot["damping"])
-    legacy.DT = float(sim["dt"])
-    legacy.T_SIM = float(experiment["duration"])
-    legacy.N_STEPS = round(legacy.T_SIM / legacy.DT)
-    legacy.HORIZON = legacy.HORIZON_OBS = int(ctrl["horizon"])
-    legacy.N_SAMPLES = legacy.N_SAMPLES_OBS = int(ctrl["samples"])
-    legacy.LAMBDA = float(ctrl["temperature"])
-    legacy.MPPI_SEED = int(ctrl["seed"])
-    legacy.NOISE_VAR = tuple(float(v) for v in ctrl["noise_variance"])
-    legacy.SQP_MAX_ITER = int(ctrl["sqp_max_iterations"])
+    runtime.TAU_MAX = tuple(float(v) for v in robot["torque_limit"])
+    runtime.DQ_MAX = float(robot["velocity_limit"])
+    runtime.B_DAMP = tuple(float(v) for v in robot["damping"])
+    runtime.DT = float(sim["dt"])
+    runtime.T_SIM = float(experiment["duration"])
+    runtime.N_STEPS = round(runtime.T_SIM / runtime.DT)
+    runtime.HORIZON = runtime.HORIZON_OBS = int(ctrl["horizon"])
+    runtime.N_SAMPLES = runtime.N_SAMPLES_OBS = int(ctrl["samples"])
+    runtime.LAMBDA = float(ctrl["temperature"])
+    runtime.MPPI_SEED = int(ctrl["seed"])
+    runtime.NOISE_VAR = tuple(float(v) for v in ctrl["noise_variance"])
+    runtime.SQP_MAX_ITER = int(ctrl["sqp_max_iterations"])
 
     mppi, sqp = costs["mppi"], costs["sqp"]
-    legacy.MPPI_W_POS, legacy.MPPI_W_TERM = float(mppi["position"]), float(mppi["terminal"])
-    legacy.W_VEL, legacy.W_ACT = float(mppi["velocity"]), float(mppi["action"])
-    legacy.W_SMOOTH = float(mppi["smoothness"])
-    legacy.W_SMOOTH_OBS = float(mppi["obstacle_smoothness"])
-    legacy.SQP_W_POS, legacy.SQP_W_TERM = float(sqp["position"]), float(sqp["terminal"])
-    legacy.SQP_W_VEL, legacy.SQP_W_ACT = float(sqp["velocity"]), float(sqp["action"])
-    legacy.SQP_W_SMOOTH = float(sqp["smoothness"])
-    legacy.SQP_W_SMOOTH_OBS = float(sqp["obstacle_smoothness"])
+    runtime.MPPI_W_POS, runtime.MPPI_W_TERM = float(mppi["position"]), float(mppi["terminal"])
+    runtime.W_VEL, runtime.W_ACT = float(mppi["velocity"]), float(mppi["action"])
+    runtime.W_SMOOTH = float(mppi["smoothness"])
+    runtime.W_SMOOTH_OBS = float(mppi["obstacle_smoothness"])
+    runtime.SQP_W_POS, runtime.SQP_W_TERM = float(sqp["position"]), float(sqp["terminal"])
+    runtime.SQP_W_VEL, runtime.SQP_W_ACT = float(sqp["velocity"]), float(sqp["action"])
+    runtime.SQP_W_SMOOTH = float(sqp["smoothness"])
+    runtime.SQP_W_SMOOTH_OBS = float(sqp["obstacle_smoothness"])
 
     static, dynamic = obs["static"], obs["dynamic"]
-    legacy.STATIC_OBSTACLE_COUNT = int(obs["count"])
-    legacy.STATIC_OBSTACLE_SIZE = float(static["size"])
-    legacy.MPPI_STATIC_EXP_WEIGHT = float(static["mppi_weight"])
-    legacy.SQP_STATIC_EXP_WEIGHT = float(static["sqp_weight"])
-    legacy.MPPI_STATIC_EXP_GAIN = float(static["gain"])
-    legacy.MPPI_STATIC_MARGIN = float(static["margin"])
-    legacy.MPPI_STATIC_ZONE = float(static["zone"])
-    legacy.DYNAMIC_OBSTACLE_SIZE = float(dynamic["size"])
-    legacy.DYNAMIC_OBSTACLE_SPEED_RATIO = float(dynamic["speed_ratio"])
-    legacy.DYNAMIC_OBSTACLE_PHASE_OFFSET = float(dynamic["phase_offset"])
-    legacy.CROSS_EXP_W = float(dynamic["mppi_weight"])
-    legacy.SQP_CROSS_EXP_WEIGHT = float(dynamic["sqp_weight"])
-    legacy.CROSS_EXP_K = float(dynamic["gain"])
-    legacy.CROSS_MARGIN = float(dynamic["margin"])
-    legacy.CROSS_EXP_ZONE = float(dynamic["zone"])
+    runtime.STATIC_OBSTACLE_COUNT = int(obs["count"])
+    runtime.STATIC_OBSTACLE_SIZE = float(static["size"])
+    runtime.MPPI_STATIC_EXP_WEIGHT = float(static["mppi_weight"])
+    runtime.SQP_STATIC_EXP_WEIGHT = float(static["sqp_weight"])
+    runtime.MPPI_STATIC_EXP_GAIN = float(static["gain"])
+    runtime.MPPI_STATIC_MARGIN = float(static["margin"])
+    runtime.MPPI_STATIC_ZONE = float(static["zone"])
+    runtime.DYNAMIC_OBSTACLE_SIZE = float(dynamic["size"])
+    runtime.DYNAMIC_OBSTACLE_SPEED_RATIO = float(dynamic["speed_ratio"])
+    runtime.DYNAMIC_OBSTACLE_PHASE_OFFSET = float(dynamic["phase_offset"])
+    runtime.CROSS_EXP_W = float(dynamic["mppi_weight"])
+    runtime.SQP_CROSS_EXP_WEIGHT = float(dynamic["sqp_weight"])
+    runtime.CROSS_EXP_K = float(dynamic["gain"])
+    runtime.CROSS_MARGIN = float(dynamic["margin"])
+    runtime.CROSS_EXP_ZONE = float(dynamic["zone"])
 
 
 def runtime_settings(cfg: dict[str, Any], command: str) -> dict[str, Any]:

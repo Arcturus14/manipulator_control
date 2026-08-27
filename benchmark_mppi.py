@@ -1,7 +1,6 @@
 """Paired multi-seed benchmark for baseline and tuned MPPI parameters."""
 from __future__ import annotations
 
-import argparse
 import gc
 import json
 from pathlib import Path
@@ -10,7 +9,7 @@ import numpy as np
 import torch
 
 from config import DT, MPPI_W_POS, MPPI_W_TERM, N_SAMPLES, TAU_MAX
-from run_comparison import run_mppi, waypoints
+from experiment_runner import run_mppi, waypoints
 
 
 CASES = {
@@ -63,23 +62,15 @@ def summarize(rows: list[dict], cases: list[str]) -> dict[str, dict[str, float]]
     return result
 
 
-def command_line() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--seeds", nargs="+", type=int,
-                        default=[7, 17, 27, 37, 47])
-    parser.add_argument("--trajectory", default="infinity")
-    parser.add_argument("--cases", nargs="+", choices=CASES,
-                        default=["baseline", "tuned"])
-    parser.add_argument("--output", type=Path)
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = command_line()
-    reference = waypoints(args.trajectory)
+def run_benchmark(*, seeds: list[int], trajectory: str, cases: list[str],
+                  output: Path) -> None:
+    unknown = set(cases) - CASES.keys()
+    if unknown:
+        raise ValueError(f"Unknown baseline benchmark cases: {sorted(unknown)}")
+    reference = waypoints(trajectory)
     rows = []
-    for seed in args.seeds:
-        for case in args.cases:
+    for seed in seeds:
+        for case in cases:
             parameters = CASES[case]
             print(f"\n[BENCHMARK] case={case}, seed={seed}")
             data = run_mppi(
@@ -94,11 +85,11 @@ def main() -> None:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-    summary = summarize(rows, args.cases)
+    summary = summarize(rows, cases)
     report = {
-        "trajectory": args.trajectory,
-        "seeds": args.seeds,
-        "cases": {case: CASES[case] for case in args.cases},
+        "trajectory": trajectory,
+        "seeds": seeds,
+        "cases": {case: CASES[case] for case in cases},
         "rows": rows,
         "summary": summary,
     }
@@ -110,12 +101,6 @@ def main() -> None:
         )
     print("\n[MULTI-SEED SUMMARY]")
     print(json.dumps(report, indent=2))
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(report, indent=2) + "\n",
-                               encoding="utf-8")
-        print(f"[SAVE] {args.output}")
-
-
-if __name__ == "__main__":
-    main()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(f"[SAVE] {output}")

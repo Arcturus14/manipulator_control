@@ -30,7 +30,7 @@ M(q)qdd + C(q, qd)qd + g(q) + Bqd = tau
 - **SQP**: CasADi로 비선형 OCP를 구성하고 acados의 Full-SQP 및 HPIPM QP solver로 풉니다. SQP 플랜트 계산은 CPU `float64`를 사용합니다.
 - **DOB**: 측정 가속도와 nominal inverse dynamics로 외란 토크를 추정하고 제어 입력에 보상값을 더합니다.
 
-기본 시뮬레이션은 제어 주기 20 ms, 총 10초(500 step), 예측 horizon 10으로 설정되어 있습니다. 실행·튜닝 설정은 `configs/*.yaml`에서 관리하고, `config.py`는 모델 구현의 기본 상수와 하위 호환성을 제공합니다.
+기본 시뮬레이션은 제어 주기 20 ms, 총 10초(500 step), 예측 horizon 10으로 설정되어 있습니다. 실행·튜닝 설정은 `configs/*.yaml`에서 관리하고, `config.py`는 계산 모듈이 사용하는 런타임 상수를 제공합니다.
 
 ## 프로젝트 구조
 
@@ -38,10 +38,9 @@ M(q)qdd + C(q, qd)qd + g(q) + Bqd = tau
 .
 ├── configs/                  # 기본값과 실행별 YAML 설정
 ├── main.py                   # run/compare/benchmark 통합 진입점
-├── config.py                 # 모델 기본 상수 및 계산 모듈 호환 계층
+├── config.py                 # 모델 기본값과 계산 모듈 런타임 상수
 ├── execute.sh                # 환경변수 설정 후 main.py 실행
-├── run.py                    # 기존 단일 실행 호환 모듈
-├── run_comparison.py         # 공통 controller 실행 함수
+├── experiment_runner.py      # 공통 controller 실행 함수
 ├── controllers/
 │   ├── mppi_dob_controller.py
 │   └── sqp.py
@@ -114,6 +113,7 @@ SQP를 사용하려면 `requirements.txt`의 CasADi 외에도 빌드가 완료�
 - `configs/mppi_static_obstacle.yaml`
 - `configs/mppi_dynamic_obstacle.yaml`
 - `configs/compare_mppi_sqp.yaml`
+- `configs/compare_mppi_sqp_static_complex.yaml`
 - `configs/compare_dob.yaml`
 - `configs/benchmark_static.yaml`
 
@@ -148,8 +148,7 @@ source .venv/bin/activate
 ```
 
 `execute.sh`는 acados 관련 환경변수만 설정하며 설정 파일을 직접 해석하지 않습니다.
-기존 `run.py`, `run_comparison.py`, benchmark 스크립트는 계산 함수와 하위 호환을
-위해 유지하지만 새로운 실행의 표준 진입점은 `main.py`입니다.
+단일 실행, 비교와 benchmark의 유일한 사용자 진입점은 `main.py`입니다.
 
 첫 MPPI 실행에서는 Torch/Inductor kernel 컴파일 때문에 초기 시간이 오래 걸릴 수 있습니다. 컴파일된 Inductor/Triton kernel은 `.torch_cache/`에 보관되어 이후 별도 프로세스에서도 재사용되며, 이 디렉터리는 Git에서 제외됩니다. 그래프나 실행 환경이 바뀌면 Torch가 새 cache key로 필요한 kernel만 다시 컴파일합니다. 커널 준비는 제어 루프 진입 전에 완료되며 성능 통계에는 모든 제어 step이 포함됩니다.
 
@@ -161,6 +160,7 @@ SQP의 acados 생성 코드와 공유 라이브러리는 `c_generated_code_ur5_s
 
 ```text
 results/
+├── legacy_data/              # 이전 data/ 실행 결과 보존본
 └── 20260827_153500_123456/
     ├── config.yaml
     ├── results.npz

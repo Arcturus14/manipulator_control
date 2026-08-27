@@ -1,19 +1,16 @@
-"""Run two configured UR5 cases and render side-by-side comparisons."""
+"""Shared controller runners used by the unified CLI and benchmarks."""
 from __future__ import annotations
 
-import argparse
 import logging
 import math
-import shutil
 import time
-from datetime import datetime
 from pathlib import Path
 
 import matplotlib
 import numpy as np
 
-# This module is also an independent entry point, so configure the persistent
-# workspace-local compilation cache here as well.
+# Configure the persistent workspace-local compilation cache before importing
+# the compiled MPPI controller implementation.
 from utils.torch_runtime import configure_compilation_cache
 
 configure_compilation_cache()
@@ -53,24 +50,10 @@ from config import (CROSS_EXP_K, CROSS_EXP_W, CROSS_EXP_ZONE, CROSS_MARGIN,
 from controllers.mppi_dob_controller import UR5Tracker
 from costs.obstacle_cost import ObstacleCost
 from kinematics.ur5_kinematics import ik_np
-from utils.execution_config import (configuration_name,
-                                    load_execution_config)
 from utils.trajectory import (TRAJECTORIES, chasing_obstacle_paths,
                               static_obstacle_centers)
-from visualization.animator import animate_comparison
 from visualization.plotters import (LABELS, compute_metrics, plot_3d_trajectory,
                                     plot_result_dashboard, plot_timeseries)
-
-ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data"
-NPZ_DIR = DATA_DIR / "npz"
-PNG_ARCHIVE_DIR = DATA_DIR / "png"
-LEGACY_RESULT_NAMES = (
-    "MPPI_circle_results.npz",
-    "MPPI_DOB_circle_results.npz",
-    "MPPI_cross_results.npz",
-    "MPPI_DOB_cross_results.npz",
-)
 
 PLOT_FILES = {
     "trajectory": "final_trajectory.png",
@@ -79,44 +62,12 @@ PLOT_FILES = {
 }
 
 
-def prepare_data_directories() -> None:
-    """Create storage directories and migrate legacy root-level NPZ files."""
-    NPZ_DIR.mkdir(parents=True, exist_ok=True)
-    PNG_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-    for name in LEGACY_RESULT_NAMES:
-        legacy = ROOT / name
-        if not legacy.exists():
-            continue
-        target = NPZ_DIR / name
-        if target.exists():
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-            target = NPZ_DIR / f"legacy_{stamp}_{legacy.name}"
-        shutil.move(str(legacy), str(target))
-        print(f"[MIGRATE] {legacy} -> {target}")
-
-
-def archive_previous_plots() -> Path | None:
-    """Move current top-level PNG artifacts into a timestamped archive."""
-    current_plots = sorted(DATA_DIR.glob("*.png"))
-    if not current_plots:
-        return None
-    archive = PNG_ARCHIVE_DIR / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    archive.mkdir(parents=True)
-    for source in current_plots:
-        shutil.move(str(source), str(archive / source.name))
-    print(f"[ARCHIVE] 이전 PNG {len(current_plots)}개: {archive}")
-    return archive
-
-
-def save_latest_plots(results: dict, reference: np.ndarray, *,
-                      dynamic_paths: np.ndarray | None = None,
-                      static_centers: np.ndarray | None = None,
-                      output_dir: Path | None = None) -> dict[str, plt.Figure]:
-    """Save result figures to one run directory or the legacy data directory."""
-    destination_dir = DATA_DIR if output_dir is None else output_dir
-    destination_dir.mkdir(parents=True, exist_ok=True)
-    if output_dir is None:
-        archive_previous_plots()
+def save_plots(results: dict, reference: np.ndarray, *,
+               dynamic_paths: np.ndarray | None = None,
+               static_centers: np.ndarray | None = None,
+               output_dir: Path) -> dict[str, plt.Figure]:
+    """Save result figures in the run's timestamped output directory."""
+    output_dir.mkdir(parents=True, exist_ok=True)
     figures = {
         "trajectory": plot_3d_trajectory(
             results, reference, dynamic_paths=dynamic_paths,
@@ -126,7 +77,7 @@ def save_latest_plots(results: dict, reference: np.ndarray, *,
         "dashboard": plot_result_dashboard(results),
     }
     for name, figure in figures.items():
-        destination = destination_dir / PLOT_FILES[name]
+        destination = output_dir / PLOT_FILES[name]
         figure.savefig(destination, dpi=180, bbox_inches="tight")
         print(f"[PLOT] {destination}")
     return figures
@@ -312,57 +263,5 @@ def run_comparison(settings: dict, reference: np.ndarray
             static_centers=static_centers,
             mppi_options=settings.get("mppi_options"),
         )
-        if settings.get("save_legacy_results", True):
-            destination = NPZ_DIR / configuration_name(
-                controller, settings["has_disturbance"], use_dob,
-                obstacle_mode, settings["trajectory"]
-            )
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            np.savez(destination, **data)
-            print(f"[SAVE] {key}: {destination}")
         results[key] = data
     return results, paths, static_centers
-
-
-def command_line() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Compare two UR5 control cases")
-    parser.add_argument(
-        "--config", type=Path, default=ROOT / "config.txt",
-        help="key=value execution config (default: ./config.txt)",
-    )
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = command_line()
-    settings = load_execution_config(args.config.resolve())
-    if settings["mode"] != "comparison":
-        raise SystemExit("run_comparison.py requires mode=comparison in config.txt")
-    print(f"[CONFIG] {args.config.resolve()}")
-    prepare_data_directories()
-    reference = waypoints(settings["trajectory"], settings["n_steps"])
-    results, paths, static_centers = run_comparison(settings, reference)
-    print("\n결과 요약")
-    for key, data in results.items():
-        metrics = compute_metrics(data)
-        print(f"  {LABELS.get(key, key):<12} "
-              f"mean={metrics['mean_err_mm']:.2f} mm, "
-              f"RMSE={metrics['rmse_err_mm']:.2f} mm, "
-              f"Std={metrics['std_err_mm']:.2f} mm, "
-              f"MeanT={metrics['mean_solve_ms']:.2f} ms, "
-              f"WorstT={metrics['worst_solve_ms']:.2f} ms")
-
-    saved_figures = save_latest_plots(
-        results, reference, dynamic_paths=paths, static_centers=static_centers
-    )
-    figure, anim = animate_comparison(
-        results, reference, moving_obstacle_paths=paths,
-        static_obstacle_centers=static_centers,
-    )
-    globals().update(_LIVE_FIGURE=figure, _LIVE_ANIMATION=anim,
-                     _SAVED_FIGURES=saved_figures)
-    plt.show()
-
-
-if __name__ == "__main__":
-    main()

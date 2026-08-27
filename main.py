@@ -3,15 +3,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
-from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from utils.yaml_config import (apply_to_legacy_constants, dump_config,
+from utils.yaml_config import (apply_runtime_config, dump_config,
                                load_config, runtime_settings)
 
 
@@ -101,13 +99,12 @@ def _mppi_options(cfg: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
-    from run_comparison import (LABELS, compute_metrics, run_comparison,
-                                run_mppi, save_latest_plots, waypoints)
+    from experiment_runner import (LABELS, compute_metrics, run_comparison,
+                                   run_mppi, save_plots, waypoints)
     from utils.trajectory import chasing_obstacle_paths, static_obstacle_centers
 
     settings = runtime_settings(cfg, command)
     settings["mppi_options"] = _mppi_options(cfg)
-    settings["save_legacy_results"] = False
     reference = waypoints(settings["trajectory"], settings["n_steps"])
     if command == "compare":
         results, paths, centers = run_comparison(settings, reference)
@@ -137,8 +134,8 @@ def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
     (output / "metrics.json").write_text(
         json.dumps(_jsonable(metrics), indent=2) + "\n", encoding="utf-8"
     )
-    save_latest_plots(results, reference, dynamic_paths=paths,
-                      static_centers=centers, output_dir=output)
+    save_plots(results, reference, dynamic_paths=paths,
+               static_centers=centers, output_dir=output)
     print("\n결과 요약")
     for key, values in metrics.items():
         print(f"  {LABELS.get(key, key):<12} RMSE={values['rmse_err_mm']:.2f} mm, "
@@ -154,42 +151,30 @@ def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
         plt.show()
 
 
-@contextmanager
-def _arguments(arguments: list[str]):
-    previous = sys.argv
-    sys.argv = arguments
-    try:
-        yield
-    finally:
-        sys.argv = previous
-
-
 def _benchmark(cfg: dict[str, Any], output: Path) -> None:
     bench = cfg["benchmark"]
     kind = bench["type"]
-    args = [f"benchmark_{kind}_mppi.py"]
     if kind == "baseline":
-        import benchmark_mppi as module
-        args += ["--seeds", *map(str, bench["seeds"]),
-                 "--trajectory", bench["trajectories"][0],
-                 "--cases", *bench["cases"], "--output", str(output / "metrics.json")]
+        from benchmark_mppi import run_benchmark
+        run_benchmark(
+            seeds=bench["seeds"], trajectory=bench["trajectories"][0],
+            cases=bench["cases"], output=output / "metrics.json",
+        )
     elif kind == "static":
-        import benchmark_static_mppi as module
-        args += ["--seeds", *map(str, bench["seeds"]),
-                 "--trajectories", *bench["trajectories"],
-                 "--cases", *bench["cases"], "--output", str(output / "metrics.json")]
-        if bench["save_result"]:
-            args += ["--save-result", str(output / "results.npz")]
+        from benchmark_static_mppi import run_benchmark
+        run_benchmark(
+            seeds=bench["seeds"], trajectories=bench["trajectories"],
+            cases=bench["cases"], output=output / "metrics.json",
+            save_result=output / "results.npz" if bench["save_result"] else None,
+        )
     elif kind == "dynamic":
-        import benchmark_dynamic_mppi as module
-        args += ["--seeds", *map(str, bench["seeds"]),
-                 "--trajectories", *bench["trajectories"],
-                 "--weights", *map(str, bench["weights"]),
-                 "--output", str(output / "metrics.json")]
+        from benchmark_dynamic_mppi import run_benchmark
+        run_benchmark(
+            seeds=bench["seeds"], trajectories=bench["trajectories"],
+            weights=bench["weights"], output=output / "metrics.json",
+        )
     else:
         raise ValueError("benchmark.type must be baseline, static, or dynamic")
-    with _arguments(args):
-        module.main()
 
 
 def main() -> None:
@@ -200,7 +185,7 @@ def main() -> None:
             cfg["benchmark"]["trajectories"] = [args.trajectory]
         if args.seed is not None:
             cfg["benchmark"]["seeds"] = [args.seed]
-    apply_to_legacy_constants(cfg)
+    apply_runtime_config(cfg)
     if not cfg["output"]["show"]:
         import matplotlib
         matplotlib.use("Agg")

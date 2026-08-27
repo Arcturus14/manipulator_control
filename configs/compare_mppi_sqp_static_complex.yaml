@@ -1,0 +1,12 @@
+controller:
+  type: mppi
+experiment:
+  duration: 10.0
+  trajectory: complex_3d_wave
+  disturbance: true
+  dob: true
+obstacle:
+  mode: static
+  count: 5
+comparison:
+  type: controller

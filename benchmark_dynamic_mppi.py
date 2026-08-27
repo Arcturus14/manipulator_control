@@ -1,7 +1,6 @@
 """Benchmark MPPI against the fast reference-chasing dynamic cube."""
 from __future__ import annotations
 
-import argparse
 import gc
 import json
 from pathlib import Path
@@ -10,7 +9,7 @@ import numpy as np
 import torch
 
 from config import HORIZON_OBS, TAU_MAX
-from run_comparison import run_mppi, waypoints
+from experiment_runner import run_mppi, waypoints
 from utils.trajectory import chasing_obstacle_paths
 from visualization.plotters import assess_dynamic_obstacle, compute_metrics
 
@@ -33,21 +32,15 @@ def summarize(data: dict, path: np.ndarray) -> dict:
     }
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--weights", nargs="+", type=float, required=True)
-    parser.add_argument("--trajectories", nargs="+", default=["infinity"])
-    parser.add_argument("--seeds", nargs="+", type=int, default=[7])
-    parser.add_argument("--output", type=Path)
-    args = parser.parse_args()
-
+def run_benchmark(*, weights: list[float], trajectories: list[str],
+                  seeds: list[int], output: Path) -> None:
     rows = []
     print(f"device={'cuda' if torch.cuda.is_available() else 'cpu'}")
-    for trajectory in args.trajectories:
+    for trajectory in trajectories:
         reference = waypoints(trajectory)
         paths = chasing_obstacle_paths(reference, HORIZON_OBS + 2)
-        for seed in args.seeds:
-            for weight in args.weights:
+        for seed in seeds:
+            for weight in weights:
                 print(f"\n[TUNE] {trajectory}, weight={weight:g}, seed={seed}")
                 data = run_mppi(
                     reference, has_disturbance=True, use_dob=True,
@@ -68,16 +61,11 @@ def main() -> None:
                     torch.cuda.empty_cache()
 
     report = {
-        "trajectories": args.trajectories,
-        "weights": args.weights,
-        "seeds": args.seeds,
+        "trajectories": trajectories,
+        "weights": weights,
+        "seeds": seeds,
         "rows": rows,
     }
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(report, indent=2) + "\n")
-        print(f"[SAVE] {args.output}")
-
-
-if __name__ == "__main__":
-    main()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(f"[SAVE] {output}")
