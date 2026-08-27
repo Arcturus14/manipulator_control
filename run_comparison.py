@@ -74,7 +74,7 @@ LEGACY_RESULT_NAMES = (
 
 PLOT_FILES = {
     "trajectory": "final_trajectory.png",
-    "timeseries": "timeseries_ee_error.png",
+    "timeseries": "timeseries.png",
     "dashboard": "metrics_dashboard.png",
 }
 
@@ -110,9 +110,13 @@ def archive_previous_plots() -> Path | None:
 
 def save_latest_plots(results: dict, reference: np.ndarray, *,
                       dynamic_paths: np.ndarray | None = None,
-                      static_centers: np.ndarray | None = None) -> dict[str, plt.Figure]:
-    """Archive old plots and save all figures for the latest result under data/."""
-    archive_previous_plots()
+                      static_centers: np.ndarray | None = None,
+                      output_dir: Path | None = None) -> dict[str, plt.Figure]:
+    """Save result figures to one run directory or the legacy data directory."""
+    destination_dir = DATA_DIR if output_dir is None else output_dir
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    if output_dir is None:
+        archive_previous_plots()
     figures = {
         "trajectory": plot_3d_trajectory(
             results, reference, dynamic_paths=dynamic_paths,
@@ -122,7 +126,7 @@ def save_latest_plots(results: dict, reference: np.ndarray, *,
         "dashboard": plot_result_dashboard(results),
     }
     for name, figure in figures.items():
-        destination = DATA_DIR / PLOT_FILES[name]
+        destination = destination_dir / PLOT_FILES[name]
         figure.savefig(destination, dpi=180, bbox_inches="tight")
         print(f"[PLOT] {destination}")
     return figures
@@ -266,11 +270,12 @@ def _comparison_cases(settings: dict) -> list[tuple[str, bool]]:
 def _run_controller(controller: str, reference: np.ndarray,
                     has_disturbance: bool, use_dob: bool,
                     dynamic_paths: np.ndarray | None,
-                    static_centers: np.ndarray | None) -> dict:
+                    static_centers: np.ndarray | None,
+                    mppi_options: dict | None = None) -> dict:
     if controller == "mppi":
         return run_mppi(reference, has_disturbance=has_disturbance,
                         use_dob=use_dob, dynamic_paths=dynamic_paths,
-                        static_centers=static_centers)
+                        static_centers=static_centers, **(mppi_options or {}))
     from controllers.sqp import run_sqp
 
     return run_sqp(reference, has_disturbance=has_disturbance,
@@ -305,13 +310,16 @@ def run_comparison(settings: dict, reference: np.ndarray
             use_dob=use_dob,
             dynamic_paths=paths,
             static_centers=static_centers,
+            mppi_options=settings.get("mppi_options"),
         )
-        destination = NPZ_DIR / configuration_name(
-            controller, settings["has_disturbance"], use_dob,
-            obstacle_mode, settings["trajectory"]
-        )
-        np.savez(destination, **data)
-        print(f"[SAVE] {key}: {destination}")
+        if settings.get("save_legacy_results", True):
+            destination = NPZ_DIR / configuration_name(
+                controller, settings["has_disturbance"], use_dob,
+                obstacle_mode, settings["trajectory"]
+            )
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            np.savez(destination, **data)
+            print(f"[SAVE] {key}: {destination}")
         results[key] = data
     return results, paths, static_centers
 

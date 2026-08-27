@@ -1,0 +1,65 @@
+robot:
+  torque_limit: [150.0, 150.0, 150.0, 28.0, 28.0, 28.0]
+  velocity_limit: 6.0
+  damping: [0.12, 0.12, 0.10, 0.08, 0.08, 0.06]
+simulation:
+  dt: 0.02
+controller:
+  type: mppi
+  horizon: 10
+  samples: 136
+  temperature: 0.2
+  seed: 7
+  noise_variance: [16.0, 28.0, 16.0, 3.2, 3.2, 1.0]
+  sqp_max_iterations: 5
+cost:
+  mppi:
+    position: 960000.0
+    terminal: 2400000.0
+    velocity: 5.0
+    action: 0.0005
+    smoothness: 0.25
+    obstacle_smoothness: 0.025
+  sqp:
+    position: 960000.0
+    terminal: 2400000.0
+    velocity: 5.0
+    action: 0.0005
+    smoothness: 0.0001
+    obstacle_smoothness: 0.0001
+experiment:
+  duration: 10.0
+  trajectory: circle
+  disturbance: false
+  dob: false
+obstacle:
+  mode: none
+  count: 4
+  static:
+    size: 0.010
+    mppi_weight: 5000.0
+    sqp_weight: 8250.0
+    gain: 500.0
+    margin: 0.002
+    zone: 0.004
+  dynamic:
+    size: 0.010
+    speed_ratio: 4.6
+    phase_offset: 0.5
+    mppi_weight: 1400.0
+    sqp_weight: 8500.0
+    gain: 38.0
+    margin: 0.026
+    zone: 0.012
+comparison:
+  type: controller
+benchmark:
+  type: static
+  trajectories: [infinity]
+  seeds: [7]
+  cases: [tuned_realtime]
+  weights: [1400.0]
+  save_result: false
+output:
+  root: results
+  show: true

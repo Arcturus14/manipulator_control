@@ -1,0 +1,8 @@
+controller:
+  type: mppi
+experiment:
+  trajectory: circle
+  disturbance: false
+  dob: false
+obstacle:
+  mode: none

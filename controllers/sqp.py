@@ -40,6 +40,7 @@ from config import (B_DAMP, CROSS_EXP_K, CROSS_EXP_ZONE, CROSS_MARGIN,
                     MASS_MATRIX_REGULARIZATION, MPPI_STATIC_EXP_GAIN,
                     MPPI_STATIC_MARGIN, MPPI_STATIC_ZONE,
                     SQP_CROSS_EXP_WEIGHT, SQP_STATIC_EXP_WEIGHT, SQP_W_ACT,
+                    SQP_MAX_ITER,
                     SQP_W_POS, SQP_W_SMOOTH, SQP_W_SMOOTH_OBS, SQP_W_TERM,
                     SQP_W_VEL, STATIC_OBSTACLE_SIZE, TAU_MAX,
                     TIMING_WARMUP_STEPS)
@@ -49,7 +50,6 @@ from observers.dob import TorchDisturbanceObserver
 from utils.disturbance import sinusoidal_disturbance
 
 SQP_HORIZON = HORIZON
-SQP_MAX_ITER = 5
 SQP_MIN_OBSTACLE_SLOTS = 2
 SQP_STATIC_GUIDANCE_OFFSET = 0.012
 SQP_STATIC_GUIDANCE_HALF_WIDTH = 0.020

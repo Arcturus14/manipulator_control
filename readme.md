@@ -16,7 +16,7 @@ UR5 6축 매니퓰레이터의 Cartesian 궤적 추종 성능을 시뮬레이션
   - MPPI vs SQP
   - DOB OFF vs DOB ON
 - 평균 오차, RMSE, 표준편차, 평균/최악 계산 시간 산출
-- NPZ 결과 저장, PNG 그래프 생성 및 이전 그래프 자동 보관
+- 실행별 폴더에 최종 YAML 설정, NPZ 결과, JSON 지표와 PNG 그래프 저장
 
 ## 모델과 제어기
 
@@ -30,17 +30,18 @@ M(q)qdd + C(q, qd)qd + g(q) + Bqd = tau
 - **SQP**: CasADi로 비선형 OCP를 구성하고 acados의 Full-SQP 및 HPIPM QP solver로 풉니다. SQP 플랜트 계산은 CPU `float64`를 사용합니다.
 - **DOB**: 측정 가속도와 nominal inverse dynamics로 외란 토크를 추정하고 제어 입력에 보상값을 더합니다.
 
-기본 시뮬레이션은 제어 주기 20 ms, 총 10초(500 step), 예측 horizon 10으로 설정되어 있습니다. 세부 물리 파라미터와 비용 가중치는 [`config.py`](config.py)에서 변경할 수 있습니다.
+기본 시뮬레이션은 제어 주기 20 ms, 총 10초(500 step), 예측 horizon 10으로 설정되어 있습니다. 실행·튜닝 설정은 `configs/*.yaml`에서 관리하고, `config.py`는 모델 구현의 기본 상수와 하위 호환성을 제공합니다.
 
 ## 프로젝트 구조
 
 ```text
 .
-├── config.py                 # 모델, 시뮬레이션, 제어기 및 비용 파라미터
-├── config.txt                # 실행 조건 설정
-├── execute.sh                # config.txt의 mode에 맞는 진입점 실행
-├── run.py                    # 단일 제어기 시뮬레이션
-├── run_comparison.py         # 두 조건 실행 및 결과 비교
+├── configs/                  # 기본값과 실행별 YAML 설정
+├── main.py                   # run/compare/benchmark 통합 진입점
+├── config.py                 # 모델 기본 상수 및 계산 모듈 호환 계층
+├── execute.sh                # 환경변수 설정 후 main.py 실행
+├── run.py                    # 기존 단일 실행 호환 모듈
+├── run_comparison.py         # 공통 controller 실행 함수
 ├── controllers/
 │   ├── mppi_dob_controller.py
 │   └── sqp.py
@@ -51,10 +52,7 @@ M(q)qdd + C(q, qd)qd + g(q) + Bqd = tau
 ├── utils/                    # 설정 파서, 궤적, 외란 생성기
 ├── visualization/            # 그래프와 3D 애니메이션
 ├── c_generated_code_ur5_sqp/ # acados 자동 생성·컴파일 결과
-└── data/
-    ├── npz/                  # 조건별 원시 결과
-    ├── png/                  # 이전 그래프의 timestamp별 보관본
-    └── *.png                 # 가장 최근 실행의 그래프
+└── results/<timestamp>/      # 설정, 결과, 지표와 그래프를 묶은 실행 기록
 ```
 
 ## 실행 환경
@@ -72,11 +70,17 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-MPPI 실행에는 최소한 NumPy, SciPy, Matplotlib, PyTorch, `pytorch_mppi`가 필요합니다. `requirements.txt`는 개발 환경 전체를 고정한 목록이므로 설치 환경과 CUDA 버전에 맞는 PyTorch wheel이 필요한 경우 먼저 PyTorch를 별도로 설치하십시오.
+`requirements.txt`에는 프로젝트가 직접 사용하는 NumPy, Matplotlib,
+PyTorch, `pytorch_mppi`, CasADi, PyYAML만 명시되어 있습니다. SciPy,
+`arm_pytorch_utilities`, CUDA runtime 등은 이 패키지들의 전이 의존성으로
+설치됩니다. 설치 환경과 CUDA 버전에 맞는 PyTorch wheel이 필요한 경우에는
+PyTorch를 먼저 별도로 설치하십시오.
 
 ### SQP 추가 의존성
 
-SQP를 사용하려면 CasADi와 빌드가 완료된 acados가 추가로 필요합니다. 현재 코드에는 개발 머신의 다음 경로가 기본값으로 들어 있습니다.
+SQP를 사용하려면 `requirements.txt`의 CasADi 외에도 빌드가 완료된 acados가
+필요합니다. `acados_template`은 PyPI 의존성이 아니라 acados 소스 트리가
+제공합니다. 현재 코드에는 개발 머신의 다음 경로가 기본값으로 들어 있습니다.
 
 ```text
 /home/arclab-04/acados
@@ -85,93 +89,67 @@ SQP를 사용하려면 CasADi와 빌드가 완료된 acados가 추가로 필요�
 
 다른 머신에서는 다음 항목을 로컬 환경에 맞게 수정해야 합니다.
 
-- [`execute.sh`](execute.sh)의 `PYTHON_BIN`과 기본 `ACADOS_SOURCE_DIR`
+- [`execute.sh`](execute.sh)의 기본 `ACADOS_SOURCE_DIR`
 - [`controllers/sqp.py`](controllers/sqp.py)의 `_CASADI_SITE`, `_ACADOS_PYTHON`, 기본 `ACADOS_SOURCE_DIR`
 - 실행 전 `LD_LIBRARY_PATH=${ACADOS_SOURCE_DIR}/lib:${LD_LIBRARY_PATH}` 설정
 
 `execute.sh`를 사용하지 않고 현재 가상환경의 Python으로 직접 실행할 수도 있습니다.
 
-## 실행 설정
+## YAML 설정과 실행
 
-[`config.txt`](config.txt)의 모든 키는 필수이며 알 수 없는 키나 중복 키가 있으면 실행이 중단됩니다.
+설정은 물리 모델(`robot`, `simulation`), 제어기와 비용(`controller`,
+`cost`), 실험 조건(`experiment`, `obstacle`, `comparison`, `benchmark`)으로
+구분합니다. 모든 실행은 `configs/default.yaml`을 먼저 읽고 선택한 YAML과 CLI
+인자를 차례로 덮어씁니다.
 
-| 키 | 값 | 설명 |
-|---|---|---|
-| `mode` | `single`, `comparison` | 단일 실행 또는 두 조건 비교 |
-| `comparison_type` | `controller`, `dob` | 제어기 비교 또는 DOB ON/OFF 비교 |
-| `controller` | `mppi`, `sqp` | 단일 실행 제어기 또는 DOB 비교의 공통 제어기 |
-| `use_dob` | `true`, `false` | 단일 실행 또는 제어기 비교에 공통 적용할 DOB 설정 |
-| `use_disturbance` | `true`, `false` | 외란 적용 여부 |
-| `T_SIM` | 양의 실수, `DT`의 정수배 | 기준 궤적 1회 주행 및 전체 시뮬레이션 시간 [s] |
-| `USE_OBSTACLES` | `Dynamic`, `Static`, `False` | 이동 구 장애물, 균등 배치된 10 mm 정적 정육면체, 또는 장애물 미사용 |
-| `STATIC_OBSTACLE_COUNT` | 1 이상의 정수 | 시작점을 제외하고 궤적 진행률에 균등 배치할 정적 장애물 수 |
-| `trajectory` | `circle`, `infinity`, `rectangle`, `complex_3d_wave`, `multiscale_3d` | 기준 말단 궤적 |
-
-Boolean 값에는 `true/false` 외에 `yes/no`, `y/n`, `1/0`, `on/off`도 사용할 수 있습니다.
-
-`N_STEPS = T_SIM / DT`로 계산되므로 `DT`를 유지한 채 `T_SIM`을 늘리면 같은
-기준 궤적을 더 많은 step에 걸쳐 천천히 주행합니다. 정적 장애물은 설정한 개수를
-유지하면서 전체 궤적 진행률에 균등 배치되며 reference index 0에는 생성되지 않습니다.
-
-정적 장애물 MPPI는 CUDA 완료 동기화 기준 20 ms 제어주기에 맞춘 별도 기본값을 사용합니다:
-예측 horizon 9, sample 112, 장애물 표면 안전 여유 2 mm, soft zone 4 mm입니다.
-SQP는 MPPI와 독립된 장벽 파라미터를 사용합니다. 정적 장애물에서는 국소 SQP가
-장애물 정면에서 멈추는 대칭 해를 피하기 위해 원래 기준 궤적 주변에 부드러운 측방
-유도 궤적을 내부적으로 생성합니다. 저장되는 오차는 계속 원래 기준 궤적에 대해
-계산되며, 내부 유도 궤적은 NPZ의 `sqp_guidance_waypoints`에 함께 저장됩니다.
-재검증에는 `benchmark_static_mppi.py --cases tuned_realtime`을 사용할 수 있습니다.
-
-### 설정 예시
-
-MPPI와 SQP를 동일한 외란 및 장애물 조건에서 비교하는 예시입니다.
-
-```ini
-mode = comparison
-comparison_type = controller
-controller = mppi
-use_dob = true
-use_disturbance = true
-T_SIM = 10.0
-USE_OBSTACLES = Dynamic
-STATIC_OBSTACLE_COUNT = 4
-trajectory = infinity
+```text
+기본값 < --config YAML < CLI 인자
 ```
 
-`comparison_type = controller`이면 `controller` 값은 비교 대상 결정에 사용되지 않으며 MPPI와 SQP를 모두 실행합니다. `comparison_type = dob`이면 지정한 `controller`에 대해 DOB OFF와 ON을 각각 실행하고, 이때 `use_dob` 값은 비교 대상 결정에 사용되지 않습니다.
+알 수 없는 YAML 키, 잘못된 controller/obstacle mode, 잘못된 시간 간격은 실행
+전에 오류로 처리됩니다. 기본 설정과 대표 설정은 다음 파일에 있습니다.
 
-## 실행 방법
+- `configs/default.yaml`
+- `configs/mppi_baseline.yaml`
+- `configs/mppi_static_obstacle.yaml`
+- `configs/mppi_dynamic_obstacle.yaml`
+- `configs/compare_mppi_sqp.yaml`
+- `configs/compare_dob.yaml`
+- `configs/benchmark_static.yaml`
 
-### 설정 파일 기반 실행
+### 통합 진입점
 
 ```bash
-chmod +x execute.sh
-./execute.sh
+python main.py run --config configs/mppi_static_obstacle.yaml
+python main.py compare --config configs/compare_mppi_sqp.yaml
+python main.py benchmark --config configs/benchmark_static.yaml
 ```
 
-`execute.sh`는 `config.txt`의 `mode`를 읽어 `run.py` 또는 `run_comparison.py`를 선택합니다.
-
-현재 Python 환경을 직접 사용하려면 다음과 같이 실행합니다.
+일부 값은 CLI에서 마지막으로 덮어쓸 수 있습니다.
 
 ```bash
-# config.txt의 mode가 single일 때
-python run.py --config config.txt
-
-# config.txt의 mode가 comparison일 때
-python run_comparison.py --config config.txt
-```
-
-설정 파일 없이 `python run.py`를 실행하면 제어기, 외란, DOB, 장애물, 궤적을 터미널에서 대화형으로 선택할 수 있습니다.
-
-MPPI 튜닝값은 여러 난수 조건에서 다음과 같이 paired benchmark할 수 있습니다.
-
-```bash
-python benchmark_mppi.py \
-  --seeds 7 17 27 37 47 \
+python main.py run \
+  --config configs/mppi_static_obstacle.yaml \
   --trajectory infinity \
-  --output /tmp/mppi_multiseed_infinity.json
+  --seed 17 \
+  --no-show
 ```
 
-각 seed에서 기존 설정과 현재 튜닝 설정을 동일한 난수 조건으로 실행하고, 추종 오차의 평균·표준편차, 계산시간, 20 ms deadline 위반률과 토크 포화율을 출력합니다.
+지원되는 공통 override는 `--trajectory`, `--seed`, `--duration`,
+`--controller`, `--obstacle`, `--[no-]disturbance`, `--[no-]dob`,
+`--[no-]show`입니다. `compare`에서 `comparison.type: controller`이면 MPPI와
+SQP를 비교하고, `dob`이면 선택한 controller의 DOB OFF/ON을 비교합니다.
+
+가상환경을 활성화했다면 shell wrapper도 같은 인자를 그대로 전달합니다.
+
+```bash
+source .venv/bin/activate
+./execute.sh run --config configs/default.yaml
+```
+
+`execute.sh`는 acados 관련 환경변수만 설정하며 설정 파일을 직접 해석하지 않습니다.
+기존 `run.py`, `run_comparison.py`, benchmark 스크립트는 계산 함수와 하위 호환을
+위해 유지하지만 새로운 실행의 표준 진입점은 `main.py`입니다.
 
 첫 MPPI 실행에서는 Torch/Inductor kernel 컴파일 때문에 초기 시간이 오래 걸릴 수 있습니다. 컴파일된 Inductor/Triton kernel은 `.torch_cache/`에 보관되어 이후 별도 프로세스에서도 재사용되며, 이 디렉터리는 Git에서 제외됩니다. 그래프나 실행 환경이 바뀌면 Torch가 새 cache key로 필요한 kernel만 다시 컴파일합니다. 커널 준비는 제어 루프 진입 전에 완료되며 성능 통계에는 모든 제어 step이 포함됩니다.
 
@@ -179,21 +157,25 @@ SQP의 acados 생성 코드와 공유 라이브러리는 `c_generated_code_ur5_s
 
 ## 결과
 
-각 실행은 다음 형식으로 결과를 저장합니다.
+각 실행은 timestamp별 독립 디렉터리에 최종 병합 설정과 결과를 함께 저장합니다.
 
 ```text
-data/npz/{controller}_dist_{on|off}_dob_{on|off}_obs_{dynamic|static|false}_{trajectory}_results.npz
+results/
+└── 20260827_153500_123456/
+    ├── config.yaml
+    ├── results.npz
+    ├── metrics.json
+    ├── final_trajectory.png
+    ├── timeseries.png
+    └── metrics_dashboard.png
 ```
 
-NPZ에는 관절 상태(`q`), 말단 위치(`ee`), 입력 토크(`u`), 추종 오차(`err`, `err_mm`), 외란 추정/실제값(`d_hat`, `d_true`), DOB residual, step 계산 시간(`solve_t`) 및 실행 조건이 포함됩니다.
-
-가장 최근 실행의 그래프는 다음 위치에 생성됩니다.
-
-- `data/final_trajectory.png`: 기준 및 실제 3D 말단 궤적
-- `data/timeseries_ee_error.png`: 시간별 추종 오차와 step 계산 시간
-- `data/metrics_dashboard.png`: 추종 오차 및 계산 시간 비교
-
-새 실행 전에 기존 최상위 PNG는 `data/png/<timestamp>/`로 자동 이동하므로 과거 결과가 보존됩니다. `c_generated_code_ur5_sqp/`는 SQP solver 생성 과정에서 갱신될 수 있습니다.
+`config.yaml`은 기본값, 선택한 설정 파일과 CLI override를 모두 반영한 실제 최종
+설정입니다. NPZ에는 관절 상태(`q`), 말단 위치(`ee`), 입력 토크(`u`), 추종
+오차, 외란/DOB 신호와 step 계산 시간이 포함됩니다. 비교 실행의 NPZ key에는
+controller case 이름이 prefix로 붙습니다. 결과 루트는 YAML의 `output.root`로
+변경할 수 있습니다. `c_generated_code_ur5_sqp/`는 SQP solver 생성 과정에서
+갱신될 수 있습니다.
 
 ## 주요 설정값
 

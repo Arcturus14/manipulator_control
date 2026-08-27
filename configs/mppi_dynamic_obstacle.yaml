@@ -1,0 +1,8 @@
+controller:
+  type: mppi
+experiment:
+  trajectory: infinity
+  disturbance: true
+  dob: true
+obstacle:
+  mode: dynamic

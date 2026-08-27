@@ -1,0 +1,12 @@
+controller:
+  type: mppi
+experiment:
+  trajectory: infinity
+benchmark:
+  type: static
+  trajectories: [infinity]
+  seeds: [7]
+  cases: [tuned_realtime]
+  save_result: true
+output:
+  show: false

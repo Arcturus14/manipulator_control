@@ -1,0 +1,9 @@
+controller:
+  type: mppi
+experiment:
+  trajectory: infinity
+  disturbance: true
+obstacle:
+  mode: none
+comparison:
+  type: dob

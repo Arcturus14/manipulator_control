@@ -1,0 +1,11 @@
+controller:
+  type: mppi
+  horizon: 9
+  samples: 112
+experiment:
+  trajectory: infinity
+  disturbance: true
+  dob: true
+obstacle:
+  mode: static
+  count: 4
