@@ -68,23 +68,38 @@ def validate_config(cfg: dict[str, Any]) -> None:
     steps = round(duration / dt)
     if steps < 3 or not math.isclose(duration, steps * dt, abs_tol=1e-9):
         raise ValueError("experiment.duration must be an integer multiple of simulation.dt")
-    if cfg["controller"]["type"] not in {"mppi", "sqp"}:
-        raise ValueError("controller.type must be mppi or sqp")
+    controller_names = {"mppi", "sqp", "ilqr"}
+    if cfg["controller"]["type"] not in controller_names:
+        raise ValueError("controller.type must be mppi, sqp, or ilqr")
     if cfg["experiment"]["trajectory"] not in TRAJECTORY_NAMES:
         raise ValueError(f"experiment.trajectory must be one of: {', '.join(sorted(TRAJECTORY_NAMES))}")
     if cfg["controller"]["horizon"] < 1 or cfg["controller"]["samples"] < 1:
         raise ValueError("controller.horizon and controller.samples must be positive")
+    if (cfg["controller"]["sqp_max_iterations"] < 1
+            or cfg["controller"]["ilqr_max_iterations"] < 1):
+        raise ValueError("SQP and iLQR max iterations must be positive")
     if len(cfg["controller"]["noise_variance"]) != 6:
         raise ValueError("controller.noise_variance must contain six values")
     if cfg["obstacle"]["mode"] not in {"none", "static", "dynamic"}:
         raise ValueError("obstacle.mode must be none, static, or dynamic")
     if cfg["comparison"]["type"] not in {"controller", "dob"}:
         raise ValueError("comparison.type must be controller or dob")
-    if cfg["benchmark"]["type"] not in {"baseline", "static", "dynamic"}:
-        raise ValueError("benchmark.type must be baseline, static, or dynamic")
+    comparison_controllers = cfg["comparison"]["controllers"]
+    if (not isinstance(comparison_controllers, list)
+            or len(comparison_controllers) != 2
+            or any(name not in controller_names for name in comparison_controllers)
+            or comparison_controllers[0] == comparison_controllers[1]):
+        raise ValueError(
+            "comparison.controllers must contain two distinct values from "
+            "mppi, sqp, and ilqr"
+        )
+    if cfg["benchmark"]["type"] not in {"baseline", "static", "dynamic", "hardware"}:
+        raise ValueError("benchmark.type must be baseline, static, dynamic, or hardware")
     unknown_trajectories = set(cfg["benchmark"]["trajectories"]) - TRAJECTORY_NAMES
     if unknown_trajectories:
         raise ValueError(f"Unknown benchmark trajectories: {', '.join(sorted(unknown_trajectories))}")
+    if not cfg["benchmark"]["seeds"]:
+        raise ValueError("benchmark.seeds must contain at least one seed")
     if len(cfg["robot"]["torque_limit"]) != 6 or len(cfg["robot"]["damping"]) != 6:
         raise ValueError("robot torque_limit and damping must contain six values")
     if cfg["obstacle"]["count"] < 1:
@@ -112,12 +127,19 @@ def apply_runtime_config(cfg: dict[str, Any]) -> None:
     runtime.MPPI_SEED = int(ctrl["seed"])
     runtime.NOISE_VAR = tuple(float(v) for v in ctrl["noise_variance"])
     runtime.SQP_MAX_ITER = int(ctrl["sqp_max_iterations"])
+    runtime.ILQR_MAX_ITER = int(ctrl["ilqr_max_iterations"])
 
-    mppi, sqp = costs["mppi"], costs["sqp"]
+    mppi, ilqr, sqp = costs["mppi"], costs["ilqr"], costs["sqp"]
     runtime.MPPI_W_POS, runtime.MPPI_W_TERM = float(mppi["position"]), float(mppi["terminal"])
     runtime.W_VEL, runtime.W_ACT = float(mppi["velocity"]), float(mppi["action"])
     runtime.W_SMOOTH = float(mppi["smoothness"])
     runtime.W_SMOOTH_OBS = float(mppi["obstacle_smoothness"])
+    runtime.ILQR_W_POS = float(ilqr["position"])
+    runtime.ILQR_W_TERM = float(ilqr["terminal"])
+    runtime.ILQR_W_VEL = float(ilqr["velocity"])
+    runtime.ILQR_W_ACT = float(ilqr["action"])
+    runtime.ILQR_W_SMOOTH = float(ilqr["smoothness"])
+    runtime.ILQR_W_SMOOTH_OBS = float(ilqr["obstacle_smoothness"])
     runtime.SQP_W_POS, runtime.SQP_W_TERM = float(sqp["position"]), float(sqp["terminal"])
     runtime.SQP_W_VEL, runtime.SQP_W_ACT = float(sqp["velocity"]), float(sqp["action"])
     runtime.SQP_W_SMOOTH = float(sqp["smoothness"])
@@ -127,6 +149,7 @@ def apply_runtime_config(cfg: dict[str, Any]) -> None:
     runtime.STATIC_OBSTACLE_COUNT = int(obs["count"])
     runtime.STATIC_OBSTACLE_SIZE = float(static["size"])
     runtime.MPPI_STATIC_EXP_WEIGHT = float(static["mppi_weight"])
+    runtime.ILQR_STATIC_EXP_WEIGHT = float(static["ilqr_weight"])
     runtime.SQP_STATIC_EXP_WEIGHT = float(static["sqp_weight"])
     runtime.MPPI_STATIC_EXP_GAIN = float(static["gain"])
     runtime.MPPI_STATIC_MARGIN = float(static["margin"])
@@ -135,6 +158,7 @@ def apply_runtime_config(cfg: dict[str, Any]) -> None:
     runtime.DYNAMIC_OBSTACLE_SPEED_RATIO = float(dynamic["speed_ratio"])
     runtime.DYNAMIC_OBSTACLE_PHASE_OFFSET = float(dynamic["phase_offset"])
     runtime.CROSS_EXP_W = float(dynamic["mppi_weight"])
+    runtime.ILQR_CROSS_EXP_WEIGHT = float(dynamic["ilqr_weight"])
     runtime.SQP_CROSS_EXP_WEIGHT = float(dynamic["sqp_weight"])
     runtime.CROSS_EXP_K = float(dynamic["gain"])
     runtime.CROSS_MARGIN = float(dynamic["margin"])
@@ -146,6 +170,7 @@ def runtime_settings(cfg: dict[str, Any], command: str) -> dict[str, Any]:
     return {
         "mode": "single" if command == "run" else "comparison",
         "comparison_type": cfg["comparison"]["type"],
+        "comparison_controllers": list(cfg["comparison"]["controllers"]),
         "controller": cfg["controller"]["type"],
         "trajectory": experiment["trajectory"],
         "use_dob": bool(experiment["dob"]),

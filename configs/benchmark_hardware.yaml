@@ -1,0 +1,20 @@
+controller:
+  type: mppi
+  horizon: 10
+  samples: 136
+  temperature: 0.2
+experiment:
+  duration: 10.0
+  trajectory: infinity
+  disturbance: false
+  dob: false
+obstacle:
+  mode: none
+benchmark:
+  type: hardware
+  trajectories: [infinity]
+  seeds: [7, 17, 27]
+  require_cuda: true
+  save_result: false
+output:
+  show: false

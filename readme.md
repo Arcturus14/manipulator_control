@@ -1,32 +1,33 @@
 # UR5 Manipulator Control Simulation
 
-UR5 6축 매니퓰레이터의 Cartesian 궤적 추종 성능을 시뮬레이션하고, **MPPI(Model Predictive Path Integral)** 와 **비선형 SQP(Sequential Quadratic Programming)** 제어기를 비교하는 프로젝트입니다. 외란, DOB(Disturbance Observer), 이동 장애물을 각각 켜고 끌 수 있으며 실행 결과를 수치 데이터, 정적 그래프, 3D 애니메이션으로 저장·표시합니다.
+UR5 6축 매니퓰레이터의 Cartesian 궤적 추종 성능을 시뮬레이션하고, **MPPI(Model Predictive Path Integral)**, **iLQR(iterative Linear Quadratic Regulator)**, **비선형 SQP(Sequential Quadratic Programming)** 제어기를 비교하는 프로젝트입니다. 외란, DOB(Disturbance Observer), 이동 장애물을 각각 켜고 끌 수 있으며 실행 결과를 수치 데이터, 정적 그래프, 3D 애니메이션으로 저장·표시합니다.
 
 ![최종 궤적 예시](docs/images/metrics_dashboard.png)
 
 ## 주요 기능
 
 - UR5의 6자유도 비선형 강체 동역학 시뮬레이션
-- GPU 가속 MPPI와 acados 기반 Full-SQP 제어
+- GPU 가속 MPPI, 반복 선형화 기반 iLQR, acados 기반 Full-SQP 제어
 - 원(circle), 8자(infinity), 사각형(rectangle), 3D 파동(complex_3d_wave), 다중 스케일 3D(multiscale_3d) 말단 궤적 추종
 - 정현파 토크 외란과 1차 Q-filter DOB 보상
 - 기준 궤적 반대편에서 4.6배속으로 추격하는 10 mm 동적 정육면체 또는 기준 궤적에
   균등 배치되는 10 mm 정적 정육면체 장애물
 - 단일 조건 실행 또는 다음 두 조건 비교
-  - MPPI vs SQP
+  - MPPI/iLQR/SQP 중 설정한 두 제어기
   - DOB OFF vs DOB ON
 - 평균 오차, RMSE, 표준편차, 평균/최악 계산 시간 산출
 - 실행별 폴더에 최종 YAML 설정, NPZ 결과, JSON 지표와 PNG 그래프 저장
 
 ## 모델과 제어기
 
-시뮬레이션 플랜트와 두 제어기는 동일한 UR5 파라미터와 다음 동역학을 사용합니다.
+시뮬레이션 플랜트와 세 제어기는 동일한 UR5 파라미터와 다음 동역학을 사용합니다.
 
 ```text
 M(q)qdd + C(q, qd)qd + g(q) + Bqd = tau
 ```
 
 - **MPPI**: `pytorch_mppi`를 이용해 토크 시퀀스를 샘플링하고, 말단 위치 추종·속도·입력·입력 변화·장애물 비용을 최소화합니다. rollout 동역학은 `torch.compile`로 컴파일되며 CUDA가 있으면 자동으로 GPU를 사용합니다.
+- **iLQR**: UR5 비선형 동역학을 반복 선형화하고 Gauss-Newton 비용 근사와 line search로 토크 시퀀스를 갱신합니다. MPPI와 동일한 비용 항을 사용하되 가중치는 `cost.ilqr`에서 독립적으로 관리합니다. 예측에는 컴파일된 semi-implicit 적분을, 실제 플랜트에는 공통 RK4 적분을 사용하며 CPU `float64`로 실행합니다.
 - **SQP**: CasADi로 비선형 OCP를 구성하고 acados의 Full-SQP 및 HPIPM QP solver로 풉니다. SQP 플랜트 계산은 CPU `float64`를 사용합니다.
 - **DOB**: 측정 가속도와 nominal inverse dynamics로 외란 토크를 추정하고 제어 입력에 보상값을 더합니다.
 
@@ -43,6 +44,7 @@ M(q)qdd + C(q, qd)qd + g(q) + Bqd = tau
 ├── experiment_runner.py      # 공통 controller 실행 함수
 ├── controllers/
 │   ├── mppi_dob_controller.py
+│   ├── ilqr.py
 │   └── sqp.py
 ├── dynamics/                 # UR5 순/역동역학 및 plant integration
 ├── kinematics/               # DH 기반 FK, Jacobian, IK
@@ -112,17 +114,21 @@ SQP를 사용하려면 `requirements.txt`의 CasADi 외에도 빌드가 완료�
 - `configs/mppi_baseline.yaml`
 - `configs/mppi_static_obstacle.yaml`
 - `configs/mppi_dynamic_obstacle.yaml`
+- `configs/compare_mppi_ilqr.yaml`
 - `configs/compare_mppi_sqp.yaml`
 - `configs/compare_mppi_sqp_static_complex.yaml`
 - `configs/compare_dob.yaml`
 - `configs/benchmark_static.yaml`
+- `configs/benchmark_hardware.yaml`
 
 ### 통합 진입점
 
 ```bash
 python main.py run --config configs/mppi_static_obstacle.yaml
+python main.py compare --config configs/compare_mppi_ilqr.yaml
 python main.py compare --config configs/compare_mppi_sqp.yaml
 python main.py benchmark --config configs/benchmark_static.yaml
+python main.py benchmark --config configs/benchmark_hardware.yaml
 ```
 
 일부 값은 CLI에서 마지막으로 덮어쓸 수 있습니다.
@@ -136,9 +142,10 @@ python main.py run \
 ```
 
 지원되는 공통 override는 `--trajectory`, `--seed`, `--duration`,
-`--controller`, `--obstacle`, `--[no-]disturbance`, `--[no-]dob`,
+`--controller` (`mppi`, `ilqr`, `sqp`), `--obstacle`, `--[no-]disturbance`, `--[no-]dob`,
 `--[no-]show`입니다. `compare`에서 `comparison.type: controller`이면 MPPI와
-SQP를 비교하고, `dob`이면 선택한 controller의 DOB OFF/ON을 비교합니다.
+`comparison.controllers`에 지정한 두 제어기를 비교하고, `dob`이면 선택한
+controller의 DOB OFF/ON을 비교합니다.
 
 가상환경을 활성화했다면 shell wrapper도 같은 인자를 그대로 전달합니다.
 
@@ -150,7 +157,37 @@ source .venv/bin/activate
 `execute.sh`는 acados 관련 환경변수만 설정하며 설정 파일을 직접 해석하지 않습니다.
 단일 실행, 비교와 benchmark의 유일한 사용자 진입점은 `main.py`입니다.
 
+### MPPI GPU 하드웨어 비교
+
+GTX 1650과 RTX 3050처럼 서로 다른 CUDA 장비의 MPPI 연산 속도는 각 장비에서
+동일한 commit과 Python 환경으로 다음 명령을 한 번씩 실행해 측정합니다.
+
+```bash
+python main.py benchmark --config configs/benchmark_hardware.yaml
+```
+
+측정 전 두 장비 모두 AC 전원과 최고 성능 모드를 사용하고, 다른 GPU 작업을
+종료하는 것이 좋습니다. `nvidia-smi`로 드라이버가 정상 인식되는지도 확인합니다.
+
+이 설정은 Infinity 궤적, 장애물/외란/DOB 없음, tracking-only, 10초(500 step),
+MPPI `K=136`, `T=10`을 seed 3개로 반복합니다. 커널 컴파일은 각 run의 제어
+루프 전에 끝내며 JSON에는 실제 step 시간의 mean/median/p95/p99/worst,
+20 ms deadline miss, tracking RMSE와 GPU·드라이버·CUDA 환경이 기록됩니다.
+두 장비의 `metrics.json`을 한곳에 복사한 뒤 조건 검증과 속도비를 계산합니다.
+
+```bash
+python compare_hardware_mppi.py \
+  results/gtx1650/metrics.json results/rtx3050/metrics.json \
+  --output results/hardware_comparison.json
+```
+
 첫 MPPI 실행에서는 Torch/Inductor kernel 컴파일 때문에 초기 시간이 오래 걸릴 수 있습니다. 컴파일된 Inductor/Triton kernel은 `.torch_cache/`에 보관되어 이후 별도 프로세스에서도 재사용되며, 이 디렉터리는 Git에서 제외됩니다. 그래프나 실행 환경이 바뀌면 Torch가 새 cache key로 필요한 kernel만 다시 컴파일합니다. 커널 준비는 제어 루프 진입 전에 완료되며 성능 통계에는 모든 제어 step이 포함됩니다.
+
+iLQR도 prediction kernel과 전체 optimization 경로를 제어 루프 전에 한 번 실행해
+lazy compilation 및 선형대수 초기화 시간을 제외합니다. 이 시간은 결과의
+`warmup_t`에 별도로 저장되고, 실제 각 제어 step만 `solve_t`와 성능 지표에
+포함됩니다. 초기 정지 상태에서 첫 토크 시퀀스를 만드는 첫 실제 solve는 제어
+연산이므로 별도로 제거하지 않습니다.
 
 SQP의 acados 생성 코드와 공유 라이브러리는 `c_generated_code_ur5_sqp/`에 보관되며 역시 Git에서 제외됩니다. 실행 시 현재 OCP와 캐시의 호환성을 검사해 일치하면 바로 재사용하고, 모델·horizon·비용·제약 등이 달라졌으면 자동으로 다시 생성하고 컴파일합니다. 실행 종료 시 Matplotlib 창이 열리고 `plt.show()`에서 대기하므로 GUI가 없는 환경에서는 적절한 Matplotlib backend 설정이 필요합니다.
 
@@ -183,12 +220,13 @@ controller case 이름이 prefix로 붙습니다. 결과 루트는 YAML의 `outp
 |---|---:|
 | 시뮬레이션 시간 / 제어 주기 | 10 s / 0.02 s |
 | 총 step | 500 |
-| MPPI/SQP horizon | 10 |
+| MPPI/iLQR/SQP horizon | 10 |
 | MPPI sample 수 | 136 |
 | MPPI temperature `lambda` | 0.2 |
+| iLQR 최대 반복 횟수 | 2 |
 | 기준 궤적 중심 | `[0.40, 0.00, 0.35]` m |
 | 기준 궤적 반경 | 0.13 m |
 | 관절 속도 제한 | ±6 rad/s |
 | DOB cutoff 계수 `alpha` | 40 |
 
-토크 제한은 1~3번 관절 ±150 Nm, 4~6번 관절 ±28 Nm입니다. 물리·제어 파라미터를 변경할 때는 MPPI와 SQP가 모두 [`config.py`](config.py)의 값을 공유한다는 점을 고려하십시오.
+토크 제한은 1~3번 관절 ±150 Nm, 4~6번 관절 ±28 Nm입니다. 물리·제어 파라미터를 변경할 때는 MPPI, iLQR, SQP가 모두 [`config.py`](config.py)의 값을 공유한다는 점을 고려하십시오.

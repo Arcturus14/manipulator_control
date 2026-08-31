@@ -212,8 +212,8 @@ def _result_key(controller: str, use_dob: bool) -> str:
 
 def _comparison_cases(settings: dict) -> list[tuple[str, bool]]:
     if settings["comparison_type"] == "controller":
-        return [("mppi", settings["use_dob"]),
-                ("sqp", settings["use_dob"])]
+        return [(controller, settings["use_dob"])
+                for controller in settings["comparison_controllers"]]
     return [(settings["controller"], False),
             (settings["controller"], True)]
 
@@ -222,16 +222,24 @@ def _run_controller(controller: str, reference: np.ndarray,
                     has_disturbance: bool, use_dob: bool,
                     dynamic_paths: np.ndarray | None,
                     static_centers: np.ndarray | None,
-                    mppi_options: dict | None = None) -> dict:
+                    mppi_options: dict | None = None,
+                    ilqr_options: dict | None = None) -> dict:
     if controller == "mppi":
         return run_mppi(reference, has_disturbance=has_disturbance,
                         use_dob=use_dob, dynamic_paths=dynamic_paths,
                         static_centers=static_centers, **(mppi_options or {}))
-    from controllers.sqp import run_sqp
-
-    return run_sqp(reference, has_disturbance=has_disturbance,
-                   use_dob=use_dob, dynamic_paths=dynamic_paths,
-                   static_centers=static_centers)
+    if controller == "sqp":
+        from controllers.sqp import run_sqp
+        return run_sqp(reference, has_disturbance=has_disturbance,
+                       use_dob=use_dob, dynamic_paths=dynamic_paths,
+                       static_centers=static_centers)
+    if controller == "ilqr":
+        from controllers.ilqr import run_ilqr
+        return run_ilqr(reference, has_disturbance=has_disturbance,
+                        use_dob=use_dob, dynamic_paths=dynamic_paths,
+                        static_centers=static_centers,
+                        **(ilqr_options or {}))
+    raise ValueError(f"unsupported controller: {controller}")
 
 
 def run_comparison(settings: dict, reference: np.ndarray
@@ -262,6 +270,7 @@ def run_comparison(settings: dict, reference: np.ndarray
             dynamic_paths=paths,
             static_centers=static_centers,
             mppi_options=settings.get("mppi_options"),
+            ilqr_options=settings.get("ilqr_options"),
         )
         results[key] = data
     return results, paths, static_centers

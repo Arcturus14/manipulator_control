@@ -25,7 +25,7 @@ def _parser() -> argparse.ArgumentParser:
         sub.add_argument("--trajectory")
         sub.add_argument("--seed", type=int)
         sub.add_argument("--duration", type=float)
-        sub.add_argument("--controller", choices=("mppi", "sqp"))
+        sub.add_argument("--controller", choices=("mppi", "sqp", "ilqr"))
         sub.add_argument("--obstacle", choices=("none", "static", "dynamic"))
         sub.add_argument("--disturbance", action=argparse.BooleanOptionalAction,
                          default=None)
@@ -98,6 +98,24 @@ def _mppi_options(cfg: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _ilqr_options(cfg: dict[str, Any]) -> dict[str, Any]:
+    controller, cost = cfg["controller"], cfg["cost"]["ilqr"]
+    return {
+        "horizon": int(controller["horizon"]),
+        "max_iterations": int(controller["ilqr_max_iterations"]),
+        "position_weight": float(cost["position"]),
+        "terminal_weight": float(cost["terminal"]),
+        "velocity_weight": float(cost["velocity"]),
+        "action_weight": float(cost["action"]),
+        "smooth_weight": float(
+            cost["obstacle_smoothness"]
+            if cfg["obstacle"]["mode"] != "none" else cost["smoothness"]
+        ),
+        "static_exp_weight": float(cfg["obstacle"]["static"]["ilqr_weight"]),
+        "dynamic_exp_weight": float(cfg["obstacle"]["dynamic"]["ilqr_weight"]),
+    }
+
+
 def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
     from experiment_runner import (LABELS, compute_metrics, run_comparison,
                                    run_mppi, save_plots, waypoints)
@@ -105,6 +123,7 @@ def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
 
     settings = runtime_settings(cfg, command)
     settings["mppi_options"] = _mppi_options(cfg)
+    settings["ilqr_options"] = _ilqr_options(cfg)
     reference = waypoints(settings["trajectory"], settings["n_steps"])
     if command == "compare":
         results, paths, centers = run_comparison(settings, reference)
@@ -120,11 +139,17 @@ def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
                 reference, settings["has_disturbance"], settings["use_dob"],
                 paths, centers, **settings["mppi_options"],
             )
-        else:
+        elif controller == "sqp":
             from controllers.sqp import run_sqp
             data = run_sqp(
                 reference, settings["has_disturbance"], settings["use_dob"],
                 paths, centers,
+            )
+        else:
+            from controllers.ilqr import run_ilqr
+            data = run_ilqr(
+                reference, settings["has_disturbance"], settings["use_dob"],
+                paths, centers, **settings["ilqr_options"],
             )
         key = f"{controller.upper()}_DOB" if settings["use_dob"] else controller.upper()
         results = {key: data}
@@ -173,8 +198,16 @@ def _benchmark(cfg: dict[str, Any], output: Path) -> None:
             seeds=bench["seeds"], trajectories=bench["trajectories"],
             weights=bench["weights"], output=output / "metrics.json",
         )
+    elif kind == "hardware":
+        from benchmark_hardware_mppi import run_benchmark
+        options = _mppi_options(cfg)
+        run_benchmark(
+            seeds=bench["seeds"], trajectory=bench["trajectories"][0],
+            output=output / "metrics.json",
+            require_cuda=bool(bench["require_cuda"]), **options,
+        )
     else:
-        raise ValueError("benchmark.type must be baseline, static, or dynamic")
+        raise ValueError("benchmark.type must be baseline, static, dynamic, or hardware")
 
 
 def main() -> None:

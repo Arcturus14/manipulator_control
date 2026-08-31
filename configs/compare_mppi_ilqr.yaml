@@ -1,0 +1,11 @@
+controller:
+  type: mppi
+experiment:
+  trajectory: infinity
+  disturbance: false
+  dob: false
+obstacle:
+  mode: none
+comparison:
+  type: controller
+  controllers: [mppi, ilqr]

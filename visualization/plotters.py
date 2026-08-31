@@ -10,10 +10,12 @@ from config import (DT, DYNAMIC_OBSTACLE_SIZE, STATIC_OBSTACLE_SIZE,
 
 LABELS = {"MPPI": "MPPI", "MPPI_DOB": "MPPI + DOB",
           "MPPI_CROSS": "MPPI", "MPPI_DOB_CROSS": "MPPI + DOB",
-          "SQP": "SQP", "SQP_DOB": "SQP + DOB"}
+          "SQP": "SQP", "SQP_DOB": "SQP + DOB",
+          "ILQR": "iLQR", "ILQR_DOB": "iLQR + DOB"}
 COLORS = {"MPPI": "#d85b16", "MPPI_DOB": "#1261a6",
           "MPPI_CROSS": "#d85b16", "MPPI_DOB_CROSS": "#1261a6",
-          "SQP": "#7c3aed", "SQP_DOB": "#059669"}
+          "SQP": "#7c3aed", "SQP_DOB": "#059669",
+          "ILQR": "#0891b2", "ILQR_DOB": "#0f766e"}
 FIG_BG, AX_BG, GRID, TEXT, MUTED = "#f6f7f9", "#ffffff", "#d7dde5", "#20242a", "#6b7280"
 
 

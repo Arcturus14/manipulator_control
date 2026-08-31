@@ -70,6 +70,7 @@ NOISE_VAR = (16.0, 28.0, 16.0, 3.2, 3.2, 1.0)
 HORIZON_OBS = 10
 N_SAMPLES_OBS = 136
 SQP_MAX_ITER = 5
+ILQR_MAX_ITER = 2
 
 # MPPI cost weights
 MPPI_W_POS = 960_000.0
@@ -79,10 +80,19 @@ W_VEL = 5.0
 W_SMOOTH = 0.25
 W_SMOOTH_OBS = 0.025
 
+# iLQR uses the same cost terms as MPPI but keeps optimizer-specific weights.
+ILQR_W_POS = 1_200_000.0
+ILQR_W_TERM = 4_800_000.0
+ILQR_W_ACT = 0.0005
+ILQR_W_VEL = 1.0
+ILQR_W_SMOOTH = 0.001
+ILQR_W_SMOOTH_OBS = 0.0001
+
 # MPPI static-cube barrier, tuned for the 20 ms control period
 MPPI_STATIC_HORIZON = 9
 MPPI_STATIC_SAMPLES = 112
 MPPI_STATIC_EXP_WEIGHT = 5_000.0
+ILQR_STATIC_EXP_WEIGHT = 1_500.0
 MPPI_STATIC_EXP_GAIN = 500.0
 MPPI_STATIC_MARGIN = 0.002
 MPPI_STATIC_ZONE = 0.004
@@ -106,6 +116,7 @@ STATIC_OBSTACLE_COUNT = 4
 # MPPI and SQP keep separate barrier weights because their optimizers have
 # different numerical scaling; the gain, zone, margin, and geometry are shared.
 CROSS_EXP_W = 1_400.0
+ILQR_CROSS_EXP_WEIGHT = 700.0
 CROSS_EXP_K = 38.0
 CROSS_EXP_ZONE = 0.012
 CROSS_MARGIN = 0.026
