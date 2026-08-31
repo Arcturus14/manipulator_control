@@ -33,6 +33,8 @@ def _parser() -> argparse.ArgumentParser:
                          default=None)
         sub.add_argument("--show", action=argparse.BooleanOptionalAction,
                          default=None)
+        sub.add_argument("--torque-plot", action=argparse.BooleanOptionalAction,
+                         default=None)
     return parser
 
 
@@ -46,6 +48,7 @@ def _overrides(args: argparse.Namespace) -> dict[str, Any]:
         "experiment.disturbance": args.disturbance,
         "experiment.dob": args.dob,
         "output.show": args.show,
+        "output.torque_plot": args.torque_plot,
     }
 
 
@@ -160,7 +163,8 @@ def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
         json.dumps(_jsonable(metrics), indent=2) + "\n", encoding="utf-8"
     )
     save_plots(results, reference, dynamic_paths=paths,
-               static_centers=centers, output_dir=output)
+               static_centers=centers, output_dir=output,
+               include_torque=bool(cfg["output"]["torque_plot"]))
     print("\n결과 요약")
     for key, values in metrics.items():
         print(f"  {LABELS.get(key, key):<12} RMSE={values['rmse_err_mm']:.2f} mm, "
@@ -201,6 +205,7 @@ def _benchmark(cfg: dict[str, Any], output: Path) -> None:
     elif kind == "hardware":
         from benchmark_hardware_mppi import run_benchmark
         options = _mppi_options(cfg)
+        options.pop("seed", None)
         run_benchmark(
             seeds=bench["seeds"], trajectory=bench["trajectories"][0],
             output=output / "metrics.json",

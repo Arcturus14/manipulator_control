@@ -53,19 +53,22 @@ from kinematics.ur5_kinematics import ik_np
 from utils.trajectory import (TRAJECTORIES, chasing_obstacle_paths,
                               static_obstacle_centers)
 from visualization.plotters import (LABELS, compute_metrics, plot_3d_trajectory,
-                                    plot_result_dashboard, plot_timeseries)
+                                    plot_joint_torques, plot_result_dashboard,
+                                    plot_timeseries)
 
 PLOT_FILES = {
     "trajectory": "final_trajectory.png",
     "timeseries": "timeseries.png",
     "dashboard": "metrics_dashboard.png",
+    "torque": "joint_torques.png",
 }
 
 
 def save_plots(results: dict, reference: np.ndarray, *,
                dynamic_paths: np.ndarray | None = None,
                static_centers: np.ndarray | None = None,
-               output_dir: Path) -> dict[str, plt.Figure]:
+               output_dir: Path,
+               include_torque: bool = False) -> dict[str, plt.Figure]:
     """Save result figures in the run's timestamped output directory."""
     output_dir.mkdir(parents=True, exist_ok=True)
     figures = {
@@ -76,6 +79,8 @@ def save_plots(results: dict, reference: np.ndarray, *,
         "timeseries": plot_timeseries(results),
         "dashboard": plot_result_dashboard(results),
     }
+    if include_torque:
+        figures["torque"] = plot_joint_torques(results)
     for name, figure in figures.items():
         destination = output_dir / PLOT_FILES[name]
         figure.savefig(destination, dpi=180, bbox_inches="tight")

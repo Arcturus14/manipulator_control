@@ -106,6 +106,10 @@ def validate_config(cfg: dict[str, Any]) -> None:
         raise ValueError("obstacle.count must be positive")
     if cfg["obstacle"]["mode"] == "static" and cfg["obstacle"]["count"] >= steps:
         raise ValueError("obstacle.count must be smaller than the step count in static mode")
+    if not isinstance(cfg["output"]["show"], bool):
+        raise ValueError("output.show must be true or false")
+    if not isinstance(cfg["output"]["torque_plot"], bool):
+        raise ValueError("output.torque_plot must be true or false")
 
 
 def apply_runtime_config(cfg: dict[str, Any]) -> None:

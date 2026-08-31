@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -21,7 +22,13 @@ def _label(report: dict[str, Any]) -> str:
 
 def compare(first_path: Path, second_path: Path) -> dict[str, Any]:
     first, second = _load(first_path), _load(second_path)
-    if first["conditions"] != second["conditions"]:
+    first_conditions = copy.deepcopy(first["conditions"])
+    second_conditions = copy.deepcopy(second["conditions"])
+    for conditions in (first_conditions, second_conditions):
+        software = conditions.get("software", {})
+        if "python" in software:
+            software["python"] = ".".join(software["python"].split(".")[:2])
+    if first_conditions != second_conditions:
         raise ValueError(
             "Benchmark conditions differ; use reports with identical trajectory, "
             "seeds, controller parameters, and timing policy."
@@ -58,4 +65,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

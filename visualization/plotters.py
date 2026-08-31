@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-from config import (DT, DYNAMIC_OBSTACLE_SIZE, STATIC_OBSTACLE_SIZE,
+from config import (DT, DYNAMIC_OBSTACLE_SIZE, STATIC_OBSTACLE_SIZE, TAU_MAX,
                     TIMING_WARMUP_STEPS)
 
 LABELS = {"MPPI": "MPPI", "MPPI_DOB": "MPPI + DOB",
@@ -183,6 +183,41 @@ def plot_timeseries(results: dict):
     for axis in axes:
         axis.legend(frameon=False)
     fig.tight_layout(rect=[0.02, 0.02, 0.98, 0.93])
+    return fig
+
+
+def plot_joint_torques(results: dict):
+    """Plot applied torque time series separately for all six joints."""
+    fig, axes = plt.subplots(
+        3, 2, figsize=(11, 9), sharex=True, facecolor=FIG_BG,
+    )
+    fig.suptitle("Applied Joint Torque Time Series", fontsize=13,
+                 fontweight="bold")
+    limits = np.asarray(TAU_MAX, dtype=float)
+    for joint_index, axis in enumerate(axes.flat):
+        for key, data in results.items():
+            torque = np.asarray(data["u"], dtype=float)
+            if torque.ndim != 2 or torque.shape[1] != 6:
+                raise ValueError(
+                    f"{key}: torque history must have shape (steps, 6)"
+                )
+            time = np.arange(len(torque)) * DT
+            axis.plot(
+                time, torque[:, joint_index], label=LABELS.get(key, key),
+                color=COLORS.get(key), lw=1.5,
+            )
+        limit = limits[joint_index]
+        axis.axhline(limit, color="#dc2626", ls="--", lw=1.0,
+                     label="Torque limit" if joint_index == 0 else None)
+        axis.axhline(-limit, color="#dc2626", ls="--", lw=1.0)
+        _style_axis(axis, f"Joint {joint_index + 1}", r"Torque $\tau$ [Nm]")
+        axis.set_ylim(-limit * 1.08, limit * 1.08)
+        if joint_index >= 4:
+            axis.set_xlabel("Time [s]")
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.965),
+               ncol=max(1, len(labels)), frameon=False)
+    fig.tight_layout(rect=[0.02, 0.02, 0.98, 0.91])
     return fig
 
 

@@ -75,3 +75,4 @@ benchmark:
 output:
   root: results
   show: true
+  torque_plot: false

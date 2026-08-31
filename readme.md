@@ -143,9 +143,22 @@ python main.py run \
 
 지원되는 공통 override는 `--trajectory`, `--seed`, `--duration`,
 `--controller` (`mppi`, `ilqr`, `sqp`), `--obstacle`, `--[no-]disturbance`, `--[no-]dob`,
-`--[no-]show`입니다. `compare`에서 `comparison.type: controller`이면 MPPI와
+`--[no-]show`, `--[no-]torque-plot`입니다. `compare`에서
+`comparison.type: controller`이면 MPPI와
 `comparison.controllers`에 지정한 두 제어기를 비교하고, `dob`이면 선택한
 controller의 DOB OFF/ON을 비교합니다.
+
+각 관절에 실제로 적용된 토크와 토크 제한을 별도 시계열 그래프로 저장하려면
+설정 파일에서 다음 옵션을 켭니다.
+
+```yaml
+output:
+  torque_plot: true
+```
+
+또는 실행할 때 `--torque-plot`을 지정합니다. 활성화하면 실행 결과 폴더에
+`joint_torques.png`가 추가되며, 비교 실행에서는 각 관절별로 제어기 토크가
+겹쳐 표시됩니다.
 
 가상환경을 활성화했다면 shell wrapper도 같은 인자를 그대로 전달합니다.
 
