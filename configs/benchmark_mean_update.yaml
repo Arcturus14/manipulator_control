@@ -1,0 +1,21 @@
+controller:
+  type: mppi
+  horizon: 10
+  samples: 136
+  temperature: 0.2
+experiment:
+  duration: 10.0
+  trajectory: infinity
+  disturbance: true
+  dob: false
+obstacle:
+  mode: none
+benchmark:
+  type: mean_update
+  trajectories: [infinity]
+  seeds: [7, 17, 27]
+  mean_update_alphas: [1.0, 0.9]
+  save_result: true
+output:
+  show: false
+  torque_plot: true

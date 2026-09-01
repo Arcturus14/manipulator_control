@@ -9,6 +9,7 @@ controller:
   horizon: 10
   samples: 136
   temperature: 0.2
+  mean_update_alpha: 1.0
   seed: 7
   noise_variance: [16.0, 28.0, 16.0, 3.2, 3.2, 1.0]
   sqp_max_iterations: 5
@@ -70,6 +71,7 @@ benchmark:
   seeds: [7]
   cases: [tuned_realtime]
   weights: [1400.0]
+  mean_update_alphas: [1.0, 0.9]
   require_cuda: true
   save_result: false
 output:

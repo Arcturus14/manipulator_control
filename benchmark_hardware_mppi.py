@@ -114,6 +114,8 @@ def _aggregate(runs: list[dict], samples: list[np.ndarray]) -> dict[str, Any]:
 
 def run_benchmark(*, seeds: list[int], trajectory: str, output: Path,
                   n_samples: int, horizon: int, temperature: float,
+                  mean_update_alpha: float,
+                  noise_variance: list[float],
                   position_weight: float, terminal_weight: float,
                   smooth_weight: float, require_cuda: bool = True) -> None:
     environment = environment_metadata()
@@ -135,6 +137,8 @@ def run_benchmark(*, seeds: list[int], trajectory: str, output: Path,
             reference, has_disturbance=False, use_dob=False,
             dynamic_paths=None, static_centers=None, seed=seed,
             n_samples=n_samples, horizon=horizon, temperature=temperature,
+            mean_update_alpha=mean_update_alpha,
+            noise_variance=noise_variance,
             position_weight=position_weight, terminal_weight=terminal_weight,
             smooth_weight=smooth_weight,
         )
@@ -175,7 +179,8 @@ def run_benchmark(*, seeds: list[int], trajectory: str, output: Path,
             "samples": n_samples,
             "horizon": horizon,
             "temperature": temperature,
-            "noise_variance": list(NOISE_VAR),
+            "mean_update_alpha": mean_update_alpha,
+            "noise_variance": list(noise_variance),
             "position_weight": position_weight,
             "terminal_weight": terminal_weight,
             "velocity_weight": W_VEL,

@@ -75,6 +75,9 @@ def validate_config(cfg: dict[str, Any]) -> None:
         raise ValueError(f"experiment.trajectory must be one of: {', '.join(sorted(TRAJECTORY_NAMES))}")
     if cfg["controller"]["horizon"] < 1 or cfg["controller"]["samples"] < 1:
         raise ValueError("controller.horizon and controller.samples must be positive")
+    mean_update_alpha = cfg["controller"]["mean_update_alpha"]
+    if not isinstance(mean_update_alpha, Real) or not 0 < mean_update_alpha <= 1:
+        raise ValueError("controller.mean_update_alpha must be in (0, 1]")
     if (cfg["controller"]["sqp_max_iterations"] < 1
             or cfg["controller"]["ilqr_max_iterations"] < 1):
         raise ValueError("SQP and iLQR max iterations must be positive")
@@ -93,13 +96,24 @@ def validate_config(cfg: dict[str, Any]) -> None:
             "comparison.controllers must contain two distinct values from "
             "mppi, sqp, and ilqr"
         )
-    if cfg["benchmark"]["type"] not in {"baseline", "static", "dynamic", "hardware"}:
-        raise ValueError("benchmark.type must be baseline, static, dynamic, or hardware")
+    if cfg["benchmark"]["type"] not in {
+            "baseline", "static", "dynamic", "hardware", "mean_update"}:
+        raise ValueError(
+            "benchmark.type must be baseline, static, dynamic, hardware, or mean_update"
+        )
     unknown_trajectories = set(cfg["benchmark"]["trajectories"]) - TRAJECTORY_NAMES
     if unknown_trajectories:
         raise ValueError(f"Unknown benchmark trajectories: {', '.join(sorted(unknown_trajectories))}")
     if not cfg["benchmark"]["seeds"]:
         raise ValueError("benchmark.seeds must contain at least one seed")
+    mean_update_alphas = cfg["benchmark"]["mean_update_alphas"]
+    if (not isinstance(mean_update_alphas, list)
+            or len(mean_update_alphas) != 2
+            or any(not isinstance(value, Real) or not 0 < value <= 1
+                   for value in mean_update_alphas)):
+        raise ValueError(
+            "benchmark.mean_update_alphas must contain two values in (0, 1]"
+        )
     if len(cfg["robot"]["torque_limit"]) != 6 or len(cfg["robot"]["damping"]) != 6:
         raise ValueError("robot torque_limit and damping must contain six values")
     if cfg["obstacle"]["count"] < 1:
@@ -128,6 +142,7 @@ def apply_runtime_config(cfg: dict[str, Any]) -> None:
     runtime.HORIZON = runtime.HORIZON_OBS = int(ctrl["horizon"])
     runtime.N_SAMPLES = runtime.N_SAMPLES_OBS = int(ctrl["samples"])
     runtime.LAMBDA = float(ctrl["temperature"])
+    runtime.MPPI_MEAN_UPDATE_ALPHA = float(ctrl["mean_update_alpha"])
     runtime.MPPI_SEED = int(ctrl["seed"])
     runtime.NOISE_VAR = tuple(float(v) for v in ctrl["noise_variance"])
     runtime.SQP_MAX_ITER = int(ctrl["sqp_max_iterations"])

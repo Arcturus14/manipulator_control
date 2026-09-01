@@ -92,6 +92,8 @@ def _mppi_options(cfg: dict[str, Any]) -> dict[str, Any]:
         "n_samples": int(controller["samples"]),
         "horizon": int(controller["horizon"]),
         "temperature": float(controller["temperature"]),
+        "mean_update_alpha": float(controller["mean_update_alpha"]),
+        "noise_variance": [float(value) for value in controller["noise_variance"]],
         "position_weight": float(cost["position"]),
         "terminal_weight": float(cost["terminal"]),
         "smooth_weight": float(
@@ -211,8 +213,21 @@ def _benchmark(cfg: dict[str, Any], output: Path) -> None:
             output=output / "metrics.json",
             require_cuda=bool(bench["require_cuda"]), **options,
         )
+    elif kind == "mean_update":
+        from benchmark_mean_update_mppi import run_benchmark
+        options = _mppi_options(cfg)
+        options.pop("seed", None)
+        options.pop("mean_update_alpha", None)
+        run_benchmark(
+            seeds=bench["seeds"], trajectory=bench["trajectories"][0],
+            alphas=bench["mean_update_alphas"], output_dir=output,
+            save_result=bool(bench["save_result"]),
+            include_torque=bool(cfg["output"]["torque_plot"]), **options,
+        )
     else:
-        raise ValueError("benchmark.type must be baseline, static, dynamic, or hardware")
+        raise ValueError(
+            "benchmark.type must be baseline, static, dynamic, hardware, or mean_update"
+        )
 
 
 def main() -> None:

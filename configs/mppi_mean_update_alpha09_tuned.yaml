@@ -1,0 +1,22 @@
+controller:
+  type: mppi
+  horizon: 10
+  samples: 136
+  temperature: 0.24
+  mean_update_alpha: 0.9
+  noise_variance: [13.6, 23.8, 13.6, 2.72, 2.72, 0.85]
+cost:
+  mppi:
+    position: 1200000.0
+    terminal: 3600000.0
+    smoothness: 0.25
+experiment:
+  duration: 10.0
+  trajectory: infinity
+  disturbance: false
+  dob: false
+obstacle:
+  mode: none
+output:
+  show: false
+  torque_plot: true

@@ -16,6 +16,9 @@ COLORS = {"MPPI": "#d85b16", "MPPI_DOB": "#1261a6",
           "MPPI_CROSS": "#d85b16", "MPPI_DOB_CROSS": "#1261a6",
           "SQP": "#7c3aed", "SQP_DOB": "#059669",
           "ILQR": "#0891b2", "ILQR_DOB": "#0f766e"}
+LABELS.update({"CURRENT": "Current (alpha=1.0)",
+               "MEAN_UPDATE": "Mean update"})
+COLORS.update({"CURRENT": "#6b7280", "MEAN_UPDATE": "#d85b16"})
 FIG_BG, AX_BG, GRID, TEXT, MUTED = "#f6f7f9", "#ffffff", "#d7dde5", "#20242a", "#6b7280"
 
 
@@ -186,13 +189,13 @@ def plot_timeseries(results: dict):
     return fig
 
 
-def plot_joint_torques(results: dict):
+def plot_joint_torques(results: dict, *,
+                       title: str = "Applied Joint Torque Time Series"):
     """Plot applied torque time series separately for all six joints."""
     fig, axes = plt.subplots(
         3, 2, figsize=(11, 9), sharex=True, facecolor=FIG_BG,
     )
-    fig.suptitle("Applied Joint Torque Time Series", fontsize=13,
-                 fontweight="bold")
+    fig.suptitle(title, fontsize=13, fontweight="bold")
     limits = np.asarray(TAU_MAX, dtype=float)
     for joint_index, axis in enumerate(axes.flat):
         for key, data in results.items():

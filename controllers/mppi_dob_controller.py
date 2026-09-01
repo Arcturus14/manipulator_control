@@ -7,9 +7,10 @@ import numpy as np
 import torch
 from pytorch_mppi import MPPI
 
-from config import (DT, HORIZON, HORIZON_OBS, LAMBDA, MPPI_W_POS,
-                    MPPI_W_TERM, N_SAMPLES, N_SAMPLES_OBS, NOISE_VAR,
-                    W_SMOOTH, W_SMOOTH_OBS)
+from config import (DT, HORIZON, HORIZON_OBS, LAMBDA,
+                    MPPI_MEAN_UPDATE_ALPHA, MPPI_W_POS, MPPI_W_TERM,
+                    N_SAMPLES, N_SAMPLES_OBS, NOISE_VAR, W_SMOOTH,
+                    W_SMOOTH_OBS)
 from costs.obstacle_cost import ObstacleCost
 from costs.tracking_cost import TrackingCost
 from dynamics.ur5_dynamics import UR5Dynamics
@@ -33,6 +34,8 @@ class UR5Tracker:
                  *, n_samples: int | None = None,
                  horizon: int | None = None,
                  temperature: float = LAMBDA,
+                 mean_update_alpha: float = MPPI_MEAN_UPDATE_ALPHA,
+                 noise_variance: tuple[float, ...] | list[float] = NOISE_VAR,
                  position_weight: float = MPPI_W_POS,
                  terminal_weight: float = MPPI_W_TERM,
                  smooth_weight: float | None = None):
@@ -43,6 +46,12 @@ class UR5Tracker:
         self.horizon = default_horizon if horizon is None else horizon
         default_samples = N_SAMPLES_OBS if obstacle_cost else N_SAMPLES
         self.n_samples = default_samples if n_samples is None else n_samples
+        if not 0 < mean_update_alpha <= 1:
+            raise ValueError("mean_update_alpha must be in (0, 1]")
+        self.mean_update_alpha = float(mean_update_alpha)
+        if len(noise_variance) != 6 or any(value <= 0 for value in noise_variance):
+            raise ValueError("noise_variance must contain six positive values")
+        self.noise_variance = tuple(float(value) for value in noise_variance)
         self.dynamics = UR5Dynamics(device, dtype)
         # RNEA contains fixed six-link loops; compilation fuses them into a
         # small number of kernels and is essential for realtime rollout speed.
@@ -72,7 +81,9 @@ class UR5Tracker:
             raise ValueError("ObstacleCost horizon must match the obstacle MPPI horizon")
 
         self.dob = TorchDisturbanceObserver(self.dynamics, DT)
-        noise_sigma = torch.diag(torch.tensor(NOISE_VAR, dtype=dtype, device=device))
+        noise_sigma = torch.diag(torch.tensor(
+            self.noise_variance, dtype=dtype, device=device
+        ))
         self.ctrl = MPPI(
             dynamics=self._stable_rollout_dynamics,
             running_cost=self._running_cost,
@@ -150,13 +161,24 @@ class UR5Tracker:
         self.ctrl.U.copy_(feedforward[indices])
         if self.device.type == "cuda":
             torch.compiler.cudagraph_mark_step_begin()
-        self.ctrl.command(state, shift_nominal_trajectory=False)
+        self._mppi_command(state)
         if self.device.type == "cuda":
             torch.cuda.synchronize(self.device)
         self.ctrl.U.copy_(original_u)
         torch.set_rng_state(cpu_rng)
         if cuda_rng is not None:
             torch.cuda.set_rng_state(cuda_rng, self.device)
+
+    def _mppi_command(self, state: torch.Tensor) -> torch.Tensor:
+        """Update and return MPPI input with optional CuRobo-style mean blending."""
+        if self.mean_update_alpha == 1.0:
+            return self.ctrl.command(state, shift_nominal_trajectory=False)
+        warm_start = self.ctrl.U.clone()
+        self.ctrl.command(state, shift_nominal_trajectory=False)
+        self.ctrl.U.copy_(torch.lerp(
+            warm_start, self.ctrl.U, self.mean_update_alpha
+        ))
+        return self.ctrl.get_action_sequence()[0]
 
     def run(self, q0: torch.Tensor, capture_samples: bool = False, n_show: int = 50,
             has_disturbance: bool = False, use_dob: bool = False):
@@ -206,9 +228,7 @@ class UR5Tracker:
                 torch.compiler.cudagraph_mark_step_begin()
                 torch.cuda.synchronize(self.device)
             solve_start = time.perf_counter()
-            mppi_action = self.ctrl.command(
-                state, shift_nominal_trajectory=False
-            ).clamp(
+            mppi_action = self._mppi_command(state).clamp(
                 self.dynamics.u_min, self.dynamics.u_max
             )
             if self.device.type == "cuda":

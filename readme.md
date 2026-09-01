@@ -120,6 +120,8 @@ SQP를 사용하려면 `requirements.txt`의 CasADi 외에도 빌드가 완료�
 - `configs/compare_dob.yaml`
 - `configs/benchmark_static.yaml`
 - `configs/benchmark_hardware.yaml`
+- `configs/benchmark_mean_update.yaml`
+- `configs/mppi_mean_update_alpha09_tuned.yaml`
 
 ### 통합 진입점
 
@@ -129,6 +131,7 @@ python main.py compare --config configs/compare_mppi_ilqr.yaml
 python main.py compare --config configs/compare_mppi_sqp.yaml
 python main.py benchmark --config configs/benchmark_static.yaml
 python main.py benchmark --config configs/benchmark_hardware.yaml
+python main.py benchmark --config configs/benchmark_mean_update.yaml
 ```
 
 일부 값은 CLI에서 마지막으로 덮어쓸 수 있습니다.
@@ -159,6 +162,55 @@ output:
 또는 실행할 때 `--torque-plot`을 지정합니다. 활성화하면 실행 결과 폴더에
 `joint_torques.png`가 추가되며, 비교 실행에서는 각 관절별로 제어기 토크가
 겹쳐 표시됩니다.
+
+### MPPI input-sequence mean update
+
+`controller.mean_update_alpha`는 MPPI weighted-noise update에 CuRobo 방식의
+mean blending을 적용합니다.
+
+```text
+U_candidate = U_warmstart + sum(weight * noise)
+U_new = (1 - alpha) * U_warmstart + alpha * U_candidate
+```
+
+기본값 `1.0`은 기존 MPPI 동작을 그대로 보존합니다. `0.9`는 CuRobo의 기본
+mean step과 같은 완화 비율입니다. 다음 benchmark는 Infinity 궤적에서
+`alpha=1.0`과 `0.9`를 비교합니다. DOB OFF는 외란도 OFF, DOB ON은 외란도
+ON으로 실행하며 tracking 및 연산시간과 연속 torque 변화량을 집계합니다.
+
+```bash
+python main.py benchmark --config configs/benchmark_mean_update.yaml
+```
+
+`output.torque_plot: true`이면 대표 seed의 결과가
+`joint_torques_dob_off.png`와 `joint_torques_dob_on.png`로 저장됩니다.
+
+`alpha=0.9` 전용 순차 튜닝 결과는 기존 기본값을 변경하지 않고
+`configs/mppi_mean_update_alpha09_tuned.yaml`에 분리되어 있습니다. Infinity 궤적,
+장애물 없음 조건에서 temperature, noise variance, tracking/terminal weight,
+smoothness weight, samples/horizon 순서로 탐색한 값입니다.
+
+```bash
+# DOB OFF / 외란 OFF
+python main.py run --config configs/mppi_mean_update_alpha09_tuned.yaml
+
+# DOB ON / 외란 ON
+python main.py run --config configs/mppi_mean_update_alpha09_tuned.yaml \
+  --dob --disturbance
+
+# 튜닝 탐색과 3-seed 최종 비교 재실행
+python tune_mean_update_mppi.py --output results/mean_update_tuning_alpha09
+
+# 무장애/정적/동적 장애물 × 3개 외란/DOB 조건 일반화 검증
+python benchmark_mean_update_generalization.py \
+  --output results/mean_update_generalization_gpu_gtx1650 \
+  --require-cuda
+```
+
+GTX 1650 CUDA에서 선택된 핵심 값은 `temperature=0.24`,
+`noise_variance=[13.6, 23.8, 13.6, 2.72, 2.72, 0.85]`,
+tracking/terminal weight `1200000/3600000`입니다. Smoothness weight `0.25`와
+`K=136`, `T=10`은 기존값이 선택됐습니다.
 
 가상환경을 활성화했다면 shell wrapper도 같은 인자를 그대로 전달합니다.
 
