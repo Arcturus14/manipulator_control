@@ -411,7 +411,7 @@ class UR5SQPTracker:
         self.dob = TorchDisturbanceObserver(self.plant, DT)
 
     def _build_solver(self, initial_state: np.ndarray) -> AcadosOcpSolver:
-        print("[SQP] acados nonlinear OCP 준비 중 (호환 캐시 자동 재사용)...")
+        print("[SQP] Preparing acados nonlinear OCP (reusing compatible cache)...")
         start = time.perf_counter()
         # A changed OCP makes acados_template read the previous cache JSON for
         # compatibility.  Different acados versions can leave harmless legacy
@@ -432,7 +432,7 @@ class UR5SQPTracker:
                 check_reuse_possible=True,
                 verbose=False,
             )
-        cache_status = "재생성/컴파일" if solver.generated else "캐시 재사용"
+        cache_status = "generated/compiled" if solver.generated else "cache reused"
         print(f"[SQP] solver ready ({cache_status}): "
               f"{time.perf_counter() - start:.2f} s")
         return solver

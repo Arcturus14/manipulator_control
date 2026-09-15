@@ -76,11 +76,15 @@ def _jsonable(value: Any) -> Any:
 
 def _save_npz(results: dict[str, dict], destination: Path, single: bool) -> None:
     if single:
-        payload = next(iter(results.values()))
+        payload = {
+            name: value for name, value in next(iter(results.values())).items()
+            if not name.startswith("_")
+        }
     else:
         payload = {
             f"{case.lower()}__{name}": value
             for case, data in results.items() for name, value in data.items()
+            if not name.startswith("_")
         }
     np.savez(destination / "results.npz", **payload)
 
@@ -129,6 +133,7 @@ def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
     settings = runtime_settings(cfg, command)
     settings["mppi_options"] = _mppi_options(cfg)
     settings["ilqr_options"] = _ilqr_options(cfg)
+    settings["capture_mppi_samples"] = bool(cfg["output"]["show"])
     reference = waypoints(settings["trajectory"], settings["n_steps"])
     if command == "compare":
         results, paths, centers = run_comparison(settings, reference)
@@ -142,7 +147,9 @@ def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
         if controller == "mppi":
             data = run_mppi(
                 reference, settings["has_disturbance"], settings["use_dob"],
-                paths, centers, **settings["mppi_options"],
+                paths, centers,
+                capture_samples=settings["capture_mppi_samples"],
+                **settings["mppi_options"],
             )
         elif controller == "sqp":
             from controllers.sqp import run_sqp
@@ -167,7 +174,7 @@ def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
     save_plots(results, reference, dynamic_paths=paths,
                static_centers=centers, output_dir=output,
                include_torque=bool(cfg["output"]["torque_plot"]))
-    print("\n결과 요약")
+    print("\nResult summary")
     for key, values in metrics.items():
         print(f"  {LABELS.get(key, key):<12} RMSE={values['rmse_err_mm']:.2f} mm, "
               f"MeanT={values['mean_solve_ms']:.2f} ms")

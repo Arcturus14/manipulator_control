@@ -208,13 +208,13 @@ class UR5Tracker:
         self.dob_model_torque_history = [np.zeros(6)]
 
         if use_dob and has_disturbance:
-            mode = "DOB+외란"
+            mode = "DOB + disturbance"
         elif has_disturbance:
-            mode = "외란(No-DOB)"
+            mode = "disturbance (no DOB)"
         elif use_dob:
-            mode = "DOB(외란 없음)"
+            mode = "DOB (no disturbance)"
         else:
-            mode = "기본"
+            mode = "nominal"
         print(f"MPPI simulation [{mode}]: {self.episode_steps} steps "
               f"(K={self.n_samples}, T={self.horizon})")
 

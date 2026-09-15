@@ -57,9 +57,11 @@ DT = 0.02
 T_SIM = 10.0
 N_STEPS = int(T_SIM / DT)
 
-# MPPI compilation is explicitly completed before the control loop, so every
-# control step is included in realtime metrics.
-TIMING_WARMUP_STEPS = 0
+# Compilation is explicitly completed before the control loop.  The first
+# measured solves can still include a short runtime/cache stabilization tail.
+# Keep those samples in solve_t_raw, but exclude the first five control steps
+# from timing metrics and plots.  Recent CUDA traces settle by step 4-5.
+TIMING_WARMUP_STEPS = 5
 
 # MPPI
 HORIZON = 10
@@ -78,7 +80,10 @@ MPPI_W_POS = 960_000.0
 MPPI_W_TERM = 2_400_000.0
 W_ACT = 0.0005
 W_VEL = 5.0
-W_SMOOTH = 0.25
+# Obstacle-free MPPI input smoothing.  A GTX 1650, three-seed Infinity sweep
+# selected 0.35 as the best tracking/jitter trade-off; obstacle runs retain
+# their independently tuned lower weight below.
+W_SMOOTH = 0.35
 W_SMOOTH_OBS = 0.025
 
 # iLQR uses the same cost terms as MPPI but keeps optimizer-specific weights.

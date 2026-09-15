@@ -20,7 +20,7 @@ cost:
     terminal: 2400000.0
     velocity: 5.0
     action: 0.0005
-    smoothness: 0.25
+    smoothness: 0.35
     obstacle_smoothness: 0.025
   ilqr:
     position: 1200000.0

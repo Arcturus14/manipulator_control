@@ -7,4 +7,8 @@ export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib-test-manipulator}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
+if [[ "${1:-}" == "gui" ]]; then
+    shift
+    exec python simulation_gui.py "$@"
+fi
 exec python main.py "$@"

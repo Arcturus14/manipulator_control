@@ -98,6 +98,22 @@ SQP를 사용하려면 `requirements.txt`의 CasADi 외에도 빌드가 완료�
 
 ## YAML 설정과 실행
 
+### GUI 실행
+
+명령행 옵션 대신 GUI에서 실행 조건과 controller 파라미터를 선택할 수 있습니다.
+
+```bash
+python simulation_gui.py
+# 또는 기존 실행 환경 설정을 함께 적용
+./execute.sh gui
+```
+
+GUI는 단일 실행, controller/DOB 비교, benchmark를 지원합니다. 기존
+`configs/*.yaml` preset을 불러오거나 현재 설정을 새 YAML로 저장할 수 있으며,
+실제 계산은 별도 프로세스에서 `main.py`를 실행하므로 GUI의 로그와 중지 버튼을
+계속 사용할 수 있습니다. 결과가 생성되면 GUI에서 timestamp 결과 폴더를 바로
+열 수 있습니다.
+
 설정은 물리 모델(`robot`, `simulation`), 제어기와 비용(`controller`,
 `cost`), 실험 조건(`experiment`, `obstacle`, `comparison`, `benchmark`)으로
 구분합니다. 모든 실행은 `configs/default.yaml`을 먼저 읽고 선택한 YAML과 CLI
@@ -246,13 +262,12 @@ python compare_hardware_mppi.py \
   --output results/hardware_comparison.json
 ```
 
-첫 MPPI 실행에서는 Torch/Inductor kernel 컴파일 때문에 초기 시간이 오래 걸릴 수 있습니다. 컴파일된 Inductor/Triton kernel은 `.torch_cache/`에 보관되어 이후 별도 프로세스에서도 재사용되며, 이 디렉터리는 Git에서 제외됩니다. 그래프나 실행 환경이 바뀌면 Torch가 새 cache key로 필요한 kernel만 다시 컴파일합니다. 커널 준비는 제어 루프 진입 전에 완료되며 성능 통계에는 모든 제어 step이 포함됩니다.
+첫 MPPI 실행에서는 Torch/Inductor kernel 컴파일 때문에 초기 시간이 오래 걸릴 수 있습니다. 컴파일된 Inductor/Triton kernel은 `.torch_cache/`에 보관되어 이후 별도 프로세스에서도 재사용되며, 이 디렉터리는 Git에서 제외됩니다. 그래프나 실행 환경이 바뀌면 Torch가 새 cache key로 필요한 kernel만 다시 컴파일합니다. 커널 준비는 제어 루프 진입 전에 완료됩니다. measured solve에 남는 짧은 runtime/cache 안정화 구간이 `WorstT`와 시계열을 왜곡하지 않도록 첫 5개 제어 step은 `solve_t_raw`에만 보존하고 timing 통계와 그래프에서는 제외합니다.
 
 iLQR도 prediction kernel과 전체 optimization 경로를 제어 루프 전에 한 번 실행해
 lazy compilation 및 선형대수 초기화 시간을 제외합니다. 이 시간은 결과의
-`warmup_t`에 별도로 저장되고, 실제 각 제어 step만 `solve_t`와 성능 지표에
-포함됩니다. 초기 정지 상태에서 첫 토크 시퀀스를 만드는 첫 실제 solve는 제어
-연산이므로 별도로 제거하지 않습니다.
+`warmup_t`에 별도로 저장됩니다. MPPI와 동일하게 첫 5개 measured solve는 raw
+timing에 보존하되 `solve_t`와 성능 지표에서는 제외합니다.
 
 SQP의 acados 생성 코드와 공유 라이브러리는 `c_generated_code_ur5_sqp/`에 보관되며 역시 Git에서 제외됩니다. 실행 시 현재 OCP와 캐시의 호환성을 검사해 일치하면 바로 재사용하고, 모델·horizon·비용·제약 등이 달라졌으면 자동으로 다시 생성하고 컴파일합니다. 실행 종료 시 Matplotlib 창이 열리고 `plt.show()`에서 대기하므로 GUI가 없는 환경에서는 적절한 Matplotlib backend 설정이 필요합니다.
 

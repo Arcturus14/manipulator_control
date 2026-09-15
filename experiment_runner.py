@@ -115,6 +115,8 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
              position_weight: float = MPPI_W_POS,
              terminal_weight: float = MPPI_W_TERM,
              smooth_weight: float | None = None,
+             capture_samples: bool = False,
+             sample_count: int = 30,
              static_exp_weight: float = MPPI_STATIC_EXP_WEIGHT,
              static_exp_gain: float = MPPI_STATIC_EXP_GAIN,
              static_margin: float = MPPI_STATIC_MARGIN,
@@ -160,17 +162,19 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         terminal_weight=terminal_weight, smooth_weight=smooth_weight,
     )
     start = time.perf_counter()
-    q, ee, control, error_mm, _, estimate, actual = tracker.run(
+    q, ee, control, error_mm, sample_history, estimate, actual = tracker.run(
         initial_configuration(reference, target_device),
         has_disturbance=has_disturbance,
         use_dob=use_dob,
+        capture_samples=capture_samples,
+        n_show=sample_count,
     )
     elapsed = time.perf_counter() - start
     solve_times_raw = np.asarray(tracker.solve_time_history)
     solve_times = (solve_times_raw.copy() if len(solve_times_raw) == len(control)
                    else np.full(len(control), elapsed / max(len(control), 1)))
     solve_times[:min(TIMING_WARMUP_STEPS, len(solve_times))] = np.nan
-    return {
+    result = {
         "q": q, "ee": ee, "u": control,
         "err": error_mm / 1e3, "err_mm": error_mm,
         "d_hat": estimate, "d_true": actual,
@@ -216,6 +220,12 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         **({"static_obstacle_centers": static_centers}
            if static_centers is not None else {}),
     }
+    # Animation-only data is intentionally transient.  main._save_npz omits
+    # underscore-prefixed fields so enabling the interactive visualization
+    # does not change the persisted result schema or static plots.
+    if sample_history is not None:
+        result["_animation_samples"] = sample_history
+    return result
 
 
 def _result_key(controller: str, use_dob: bool) -> str:
@@ -235,11 +245,14 @@ def _run_controller(controller: str, reference: np.ndarray,
                     dynamic_paths: np.ndarray | None,
                     static_centers: np.ndarray | None,
                     mppi_options: dict | None = None,
-                    ilqr_options: dict | None = None) -> dict:
+                    ilqr_options: dict | None = None,
+                    capture_mppi_samples: bool = False) -> dict:
     if controller == "mppi":
         return run_mppi(reference, has_disturbance=has_disturbance,
                         use_dob=use_dob, dynamic_paths=dynamic_paths,
-                        static_centers=static_centers, **(mppi_options or {}))
+                        static_centers=static_centers,
+                        capture_samples=capture_mppi_samples,
+                        **(mppi_options or {}))
     if controller == "sqp":
         from controllers.sqp import run_sqp
         return run_sqp(reference, has_disturbance=has_disturbance,
@@ -283,6 +296,7 @@ def run_comparison(settings: dict, reference: np.ndarray
             static_centers=static_centers,
             mppi_options=settings.get("mppi_options"),
             ilqr_options=settings.get("ilqr_options"),
+            capture_mppi_samples=bool(settings.get("capture_mppi_samples", False)),
         )
         results[key] = data
     return results, paths, static_centers
