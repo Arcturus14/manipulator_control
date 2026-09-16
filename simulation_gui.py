@@ -28,6 +28,8 @@ CONTROLLERS = ("mppi", "ilqr", "sqp")
 OBSTACLES = ("none", "static", "dynamic")
 BENCHMARKS = ("baseline", "static", "dynamic", "hardware", "mean_update")
 OUTPUT_PATTERN = re.compile(r"^\[OUTPUT\]\s+(.+)$")
+# Edit this constant to change the mean-update value exposed by the GUI.
+GUI_MEAN_UPDATE_ALPHA = 0.9
 
 
 def _csv(values: list[Any]) -> str:
@@ -79,6 +81,7 @@ class SimulationGUI:
         self.output_directory: Path | None = None
 
         self.command_var = tk.StringVar(value="run")
+        self.mean_update_enabled_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Ready")
         self.preset_var = tk.StringVar()
         self.result_var = tk.StringVar(value="Output: not created yet")
@@ -245,7 +248,11 @@ class SimulationGUI:
         self._entry(mppi, 0, "Horizon", "controller.horizon", int)
         self._entry(mppi, 1, "Samples", "controller.samples", int)
         self._entry(mppi, 2, "Temperature λ", "controller.temperature")
-        self._entry(mppi, 3, "Mean update α", "controller.mean_update_alpha")
+        ttk.Checkbutton(
+            mppi,
+            text=f"Enable mean update (fixed α={GUI_MEAN_UPDATE_ALPHA:g})",
+            variable=self.mean_update_enabled_var,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=3)
         self._entry(mppi, 4, "Noise variance J1..J6", "controller.noise_variance", str, 34)
 
         local = self._section(tab, "Local optimizer", 1, 0)
@@ -356,6 +363,9 @@ class SimulationGUI:
 
     def _load_into_form(self, cfg: dict[str, Any]) -> None:
         self.config = copy.deepcopy(cfg)
+        self.mean_update_enabled_var.set(
+            float(cfg["controller"]["mean_update_alpha"]) < 1.0
+        )
         for path, variable in self.variables.items():
             if path == "comparison.controller_a":
                 value = cfg["comparison"]["controllers"][0]
@@ -403,6 +413,9 @@ class SimulationGUI:
             str(self.variables["comparison.controller_a"].get()),
             str(self.variables["comparison.controller_b"].get()),
         ]
+        cfg["controller"]["mean_update_alpha"] = (
+            GUI_MEAN_UPDATE_ALPHA if self.mean_update_enabled_var.get() else 1.0
+        )
         validate_config(cfg)
         if (self.command_var.get() == "compare"
                 and cfg["comparison"]["type"] == "controller"

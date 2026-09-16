@@ -66,7 +66,9 @@ def _aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def run(*, weights: list[float], seeds: list[int], output: Path,
-        require_cuda: bool) -> None:
+        require_cuda: bool, mean_update_alpha: float, temperature: float,
+        noise_variance: list[float], position_weight: float,
+        terminal_weight: float, n_samples: int, horizon: int) -> None:
     if require_cuda and not torch.cuda.is_available():
         raise RuntimeError("CUDA is required but unavailable")
     if not weights or any(weight <= 0 for weight in weights):
@@ -86,7 +88,12 @@ def run(*, weights: list[float], seeds: list[int], output: Path,
                 )
                 data = run_mppi(
                     reference, seed=seed, smooth_weight=weight,
-                    dynamic_paths=None, static_centers=None, **condition,
+                    dynamic_paths=None, static_centers=None,
+                    mean_update_alpha=mean_update_alpha,
+                    temperature=temperature, noise_variance=noise_variance,
+                    position_weight=position_weight,
+                    terminal_weight=terminal_weight,
+                    n_samples=n_samples, horizon=horizon, **condition,
                 )
                 metrics = {**_metrics(data), **_trajectory_jitter(data, reference)}
                 row = {
@@ -111,6 +118,16 @@ def run(*, weights: list[float], seeds: list[int], output: Path,
         "scenarios": SCENARIOS,
         "weights": weights,
         "seeds": seeds,
+        "mppi": {
+            "mean_update_alpha": mean_update_alpha,
+            "temperature": temperature,
+            "noise_variance": noise_variance,
+            "position_weight": position_weight,
+            "terminal_weight": terminal_weight,
+            "samples": n_samples,
+            "horizon": horizon,
+            "smoothness_cost": "boundary_plus_mean_horizon_delta_tau",
+        },
         "rows": rows,
         "summary": _aggregate(rows),
     }
@@ -127,9 +144,22 @@ def main() -> None:
     parser.add_argument("--output", type=Path,
                         default=Path("results/smoothness_screen/metrics.json"))
     parser.add_argument("--require-cuda", action="store_true")
+    parser.add_argument("--mean-update-alpha", type=float, default=0.9)
+    parser.add_argument("--temperature", type=float, default=0.24)
+    parser.add_argument("--noise-variance", nargs=6, type=float,
+                        default=[13.6, 23.8, 13.6, 2.72, 2.72, 0.85])
+    parser.add_argument("--position-weight", type=float, default=1_200_000.0)
+    parser.add_argument("--terminal-weight", type=float, default=3_600_000.0)
+    parser.add_argument("--samples", type=int, default=136)
+    parser.add_argument("--horizon", type=int, default=10)
     args = parser.parse_args()
     run(weights=args.weights, seeds=args.seeds, output=args.output,
-        require_cuda=args.require_cuda)
+        require_cuda=args.require_cuda,
+        mean_update_alpha=args.mean_update_alpha,
+        temperature=args.temperature, noise_variance=args.noise_variance,
+        position_weight=args.position_weight,
+        terminal_weight=args.terminal_weight,
+        n_samples=args.samples, horizon=args.horizon)
 
 
 if __name__ == "__main__":

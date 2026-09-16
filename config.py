@@ -67,23 +67,25 @@ TIMING_WARMUP_STEPS = 5
 HORIZON = 10
 N_SAMPLES = 136
 MPPI_SEED = 7
-LAMBDA = 0.2
+# GTX 1650 retuning for the alpha=0.9 mean update and full-horizon smoothing.
+LAMBDA = 0.24
 MPPI_MEAN_UPDATE_ALPHA = 1.0
-NOISE_VAR = (16.0, 28.0, 16.0, 3.2, 3.2, 1.0)
+NOISE_VAR = (13.6, 23.8, 13.6, 2.72, 2.72, 0.85)
 HORIZON_OBS = 10
 N_SAMPLES_OBS = 136
 SQP_MAX_ITER = 5
 ILQR_MAX_ITER = 2
 
 # MPPI cost weights
-MPPI_W_POS = 960_000.0
-MPPI_W_TERM = 2_400_000.0
+MPPI_W_POS = 1_200_000.0
+MPPI_W_TERM = 3_600_000.0
 W_ACT = 0.0005
 W_VEL = 5.0
-# Obstacle-free MPPI input smoothing.  A GTX 1650, three-seed Infinity sweep
-# selected 0.35 as the best tracking/jitter trade-off; obstacle runs retain
-# their independently tuned lower weight below.
-W_SMOOTH = 0.35
+# Obstacle-free MPPI input smoothing.  The cost contains the previous-command
+# boundary and the mean delta-torque penalty across the complete horizon.  A
+# GTX 1650, three-seed Infinity sweep selected 0.25 as the torque/tracking
+# trade-off.  Obstacle runs retain their independently tuned weight below.
+W_SMOOTH = 0.25
 W_SMOOTH_OBS = 0.025
 
 # iLQR uses the same cost terms as MPPI but keeps optimizer-specific weights.

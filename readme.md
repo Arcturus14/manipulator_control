@@ -114,6 +114,10 @@ GUI는 단일 실행, controller/DOB 비교, benchmark를 지원합니다. 기�
 계속 사용할 수 있습니다. 결과가 생성되면 GUI에서 timestamp 결과 폴더를 바로
 열 수 있습니다.
 
+GUI의 `Enable mean update`는 mean-sequence blending을 켜고 끕니다. 활성화할 때
+사용되는 고정 alpha 값은 `simulation_gui.py`의 `GUI_MEAN_UPDATE_ALPHA`에서
+수정하며, 비활성화하면 기존 MPPI와 동일한 `alpha=1.0`을 사용합니다.
+
 설정은 물리 모델(`robot`, `simulation`), 제어기와 비용(`controller`,
 `cost`), 실험 조건(`experiment`, `obstacle`, `comparison`, `benchmark`)으로
 구분합니다. 모든 실행은 `configs/default.yaml`을 먼저 읽고 선택한 YAML과 CLI

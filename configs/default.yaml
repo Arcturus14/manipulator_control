@@ -8,19 +8,19 @@ controller:
   type: mppi
   horizon: 10
   samples: 136
-  temperature: 0.2
+  temperature: 0.24
   mean_update_alpha: 1.0
   seed: 7
-  noise_variance: [16.0, 28.0, 16.0, 3.2, 3.2, 1.0]
+  noise_variance: [13.6, 23.8, 13.6, 2.72, 2.72, 0.85]
   sqp_max_iterations: 5
   ilqr_max_iterations: 2
 cost:
   mppi:
-    position: 960000.0
-    terminal: 2400000.0
+    position: 1200000.0
+    terminal: 3600000.0
     velocity: 5.0
     action: 0.0005
-    smoothness: 0.35
+    smoothness: 0.25
     obstacle_smoothness: 0.025
   ilqr:
     position: 1200000.0

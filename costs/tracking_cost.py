@@ -39,4 +39,14 @@ class TrackingCost(BaseCost):
         last_q = states[..., -1, :6].reshape(-1, 6)
         reference = self.waypoints[self.episode_step + self.horizon]
         cost = self.terminal_weight * (fk_batch(last_q) - reference).square().sum(dim=1)
-        return cost.reshape(states.shape[:2])
+        cost = cost.reshape(states.shape[:2])
+        if self.horizon > 1:
+            # The first-stage boundary term is evaluated in ``running``.
+            # Penalize every internal torque change as well, normalized by the
+            # number of transitions so the weight is independent of horizon.
+            torque = actions.clamp(self.u_min, self.u_max)
+            delta = torque[..., 1:, :] - torque[..., :-1, :]
+            cost += self.smooth_weight * delta.square().sum(dim=(-1, -2)) / (
+                self.horizon - 1
+            )
+        return cost
