@@ -67,8 +67,8 @@ class SimulationGUI:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Manipulator Control Simulation")
-        self.root.geometry("1180x820")
-        self.root.minsize(980, 700)
+        self.root.geometry("1180x960")
+        self.root.minsize(980, 820)
 
         self.config = load_config(None, {})
         self.variables: dict[str, tk.Variable] = {}
@@ -333,6 +333,10 @@ class SimulationGUI:
         self._entry(output, 0, "Output root", "output.root", str, 50)
         self._check(output, 1, "Show animation after completion", "output.show")
         self._check(output, 2, "Generate joint torque plot", "output.torque_plot")
+        self._check(
+            output, 3, r"Plot disturbance estimation error |d - d_hat|",
+            "output.disturbance_error_plot",
+        )
 
     def _build_monitor(self, parent: ttk.Frame) -> None:
         log_frame = ttk.LabelFrame(

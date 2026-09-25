@@ -124,6 +124,8 @@ def validate_config(cfg: dict[str, Any]) -> None:
         raise ValueError("output.show must be true or false")
     if not isinstance(cfg["output"]["torque_plot"], bool):
         raise ValueError("output.torque_plot must be true or false")
+    if not isinstance(cfg["output"]["disturbance_error_plot"], bool):
+        raise ValueError("output.disturbance_error_plot must be true or false")
 
 
 def apply_runtime_config(cfg: dict[str, Any]) -> None:

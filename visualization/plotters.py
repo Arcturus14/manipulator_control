@@ -224,6 +224,47 @@ def plot_joint_torques(results: dict, *,
     return fig
 
 
+def plot_disturbance_estimation_error(results: dict):
+    """Plot per-joint absolute disturbance-estimation error over time."""
+    fig, axes = plt.subplots(
+        3, 2, figsize=(11, 9), sharex=True, facecolor=FIG_BG,
+    )
+    fig.suptitle(
+        r"Disturbance Estimation Error $\tilde{d}=|d-\hat{d}|$",
+        fontsize=13, fontweight="bold",
+    )
+    for joint_index, axis in enumerate(axes.flat):
+        for key, data in results.items():
+            actual = np.asarray(data.get("d_true"), dtype=float)
+            estimate = np.asarray(data.get("d_hat"), dtype=float)
+            if (actual.ndim != 2 or estimate.ndim != 2
+                    or actual.shape[1] != 6 or estimate.shape[1] != 6):
+                raise ValueError(
+                    f"{key}: d_true and d_hat must have shape (steps, 6)"
+                )
+            count = min(len(actual), len(estimate))
+            error = np.abs(actual[:count] - estimate[:count])
+            time = np.arange(count) * DT
+            axis.plot(
+                time, error[:, joint_index], label=LABELS.get(key, key),
+                color=COLORS.get(key), lw=1.5,
+            )
+        _style_axis(
+            axis, f"Joint {joint_index + 1}",
+            r"$\tilde{d}$ [Nm]",
+        )
+        axis.set_ylim(bottom=0.0)
+        if joint_index >= 4:
+            axis.set_xlabel("Time [s]")
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    fig.legend(
+        handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.965),
+        ncol=max(1, len(labels)), frameon=False,
+    )
+    fig.tight_layout(rect=[0.02, 0.02, 0.98, 0.91])
+    return fig
+
+
 def plot_3d_trajectory(results: dict, waypoints: np.ndarray, *,
                        dynamic_paths: np.ndarray | None = None,
                        static_centers: np.ndarray | None = None):

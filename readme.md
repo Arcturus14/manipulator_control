@@ -183,6 +183,10 @@ output:
 `joint_torques.png`가 추가되며, 비교 실행에서는 각 관절별로 제어기 토크가
 겹쳐 표시됩니다.
 
+GUI의 `Plot disturbance estimation error |d - d_hat|` 또는 CLI의
+`--disturbance-error-plot`을 활성화하면 각 관절의
+`tilde d = |d - d_hat|` 시계열이 `disturbance_estimation_error.png`로 저장됩니다.
+
 ### MPPI input-sequence mean update
 
 `controller.mean_update_alpha`는 MPPI weighted-noise update에 CuRobo 방식의

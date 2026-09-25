@@ -78,3 +78,4 @@ output:
   root: results
   show: true
   torque_plot: false
+  disturbance_error_plot: false

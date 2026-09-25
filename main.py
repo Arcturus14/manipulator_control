@@ -35,6 +35,8 @@ def _parser() -> argparse.ArgumentParser:
                          default=None)
         sub.add_argument("--torque-plot", action=argparse.BooleanOptionalAction,
                          default=None)
+        sub.add_argument("--disturbance-error-plot",
+                         action=argparse.BooleanOptionalAction, default=None)
     return parser
 
 
@@ -49,6 +51,7 @@ def _overrides(args: argparse.Namespace) -> dict[str, Any]:
         "experiment.dob": args.dob,
         "output.show": args.show,
         "output.torque_plot": args.torque_plot,
+        "output.disturbance_error_plot": args.disturbance_error_plot,
     }
 
 
@@ -173,7 +176,10 @@ def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
     )
     save_plots(results, reference, dynamic_paths=paths,
                static_centers=centers, output_dir=output,
-               include_torque=bool(cfg["output"]["torque_plot"]))
+               include_torque=bool(cfg["output"]["torque_plot"]),
+               include_disturbance_error=bool(
+                   cfg["output"]["disturbance_error_plot"]
+               ))
     print("\nResult summary")
     for key, values in metrics.items():
         print(f"  {LABELS.get(key, key):<12} RMSE={values['rmse_err_mm']:.2f} mm, "
