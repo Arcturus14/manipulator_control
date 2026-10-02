@@ -108,6 +108,10 @@ python simulation_gui.py
 ./execute.sh gui
 ```
 
+`execute.sh`는 현재 활성 환경의 `python`을 우선 사용합니다. shell에 `python`이
+없으면 `/home/arclab-04/miniconda3/envs/mppi/bin/python`으로 fallback합니다.
+다른 interpreter를 사용하려면 `MANIPULATOR_PYTHON`에 실행 파일 경로를 지정합니다.
+
 GUI는 단일 실행, controller/DOB 비교, benchmark를 지원합니다. 기존
 `configs/*.yaml` preset을 불러오거나 현재 설정을 새 YAML로 저장할 수 있으며,
 실제 계산은 별도 프로세스에서 `main.py`를 실행하므로 GUI의 로그와 중지 버튼을
@@ -186,6 +190,14 @@ output:
 GUI의 `Plot disturbance estimation error |d - d_hat|` 또는 CLI의
 `--disturbance-error-plot`을 활성화하면 각 관절의
 `tilde d = |d - d_hat|` 시계열이 `disturbance_estimation_error.png`로 저장됩니다.
+
+메인 GUI/CLI에서 MPPI와 DOB를 켜면 기존 구조대로 optimizer 출력 뒤에
+`d_hat`을 더하는 외부 후보상(`dob_compensation_mode="output"`)을 사용합니다.
+DOB 추정값을 rollout 동역학의 `tau_effective = tau_sample - d_hat`에 반영하고
+출력 후보상을 생략하는 방식은 테스트 전용입니다. 이 방식은
+`benchmark_dob_rollout_comparison.py`와 `plot_dob_rollout_comparison.py`에서만
+`dob_compensation_mode="rollout"`을 명시해 비교할 수 있습니다. SQP와 iLQR의
+DOB 보상 구조는 이 실험 기능의 영향을 받지 않습니다.
 
 ### MPPI input-sequence mean update
 
@@ -281,13 +293,22 @@ SQP의 acados 생성 코드와 공유 라이브러리는 `c_generated_code_ur5_s
 
 ## 결과
 
-각 실행은 timestamp별 독립 디렉터리에 최종 병합 설정과 결과를 함께 저장합니다.
+수치 결과에 영향을 주는 최종 설정, 실행 명령(`run`, `compare`, `benchmark`),
+DOB 보상 방식, 수치 실행 코드와 CPU/GPU 환경으로 result fingerprint를 만듭니다.
+동일 fingerprint의 완전한 결과가 이미 있으면 시뮬레이션과 추가 저장을 건너뛰고
+기존 결과 경로를 출력합니다. Seed도 fingerprint에 포함되므로 독립 반복 실험은
+seed를 변경해야 합니다. `output.root`, 화면 표시와 plot 선택처럼 수치 결과를
+바꾸지 않는 출력 옵션은 중복 판정에서 제외됩니다.
+
+새로운 실행 조건일 때만 timestamp별 독립 디렉터리에 최종 병합 설정과 결과를
+함께 저장합니다.
 
 ```text
 results/
 ├── legacy_data/              # 이전 data/ 실행 결과 보존본
 └── 20260827_153500_123456/
     ├── config.yaml
+    ├── run_manifest.json
     ├── results.npz
     ├── metrics.json
     ├── final_trajectory.png

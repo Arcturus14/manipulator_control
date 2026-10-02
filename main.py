@@ -11,6 +11,8 @@ import numpy as np
 
 from utils.yaml_config import (apply_runtime_config, dump_config,
                                load_config, runtime_settings)
+from utils.result_cache import (build_manifest, find_cached_result,
+                                result_root, write_manifest)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -149,8 +151,11 @@ def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
         controller = settings["controller"]
         if controller == "mppi":
             data = run_mppi(
-                reference, settings["has_disturbance"], settings["use_dob"],
-                paths, centers,
+                reference,
+                has_disturbance=settings["has_disturbance"],
+                use_dob=settings["use_dob"],
+                dynamic_paths=paths,
+                static_centers=centers,
                 capture_samples=settings["capture_mppi_samples"],
                 **settings["mppi_options"],
             )
@@ -255,14 +260,24 @@ def main() -> None:
     if not cfg["output"]["show"]:
         import matplotlib
         matplotlib.use("Agg")
+    manifest = build_manifest(args.command, cfg, ROOT)
+    root = result_root(cfg, ROOT)
+    cached = find_cached_result(root, args.command, cfg, manifest)
+    print(f"[CONFIG] {args.config.resolve() if args.config else 'configs/default.yaml'}")
+    if cached is not None:
+        print(f"[CACHE HIT] identical result already exists: {cached}")
+        # Keep the GUI/output-consumer contract intact while reusing a result.
+        print(f"[OUTPUT] {cached}")
+        print("[SKIP] simulation and result saving were skipped")
+        return
     output = _output_directory(cfg)
     dump_config(cfg, output / "config.yaml")
-    print(f"[CONFIG] {args.config.resolve() if args.config else 'configs/default.yaml'}")
     print(f"[OUTPUT] {output}")
     if args.command == "benchmark":
         _benchmark(cfg, output)
     else:
         _run_or_compare(args.command, cfg, output)
+    write_manifest(output, manifest)
 
 
 if __name__ == "__main__":

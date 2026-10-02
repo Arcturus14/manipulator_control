@@ -81,6 +81,13 @@ class UR5Tracker:
             raise ValueError("ObstacleCost horizon must match the obstacle MPPI horizon")
 
         self.dob = TorchDisturbanceObserver(self.dynamics, DT)
+        # Keep a fixed-address tensor so every rollout in one MPPI solve sees
+        # the latest DOB estimate without forcing torch.compile to specialize
+        # on a new Python object after each observer update.  The estimate is
+        # held constant across the prediction horizon (zero-order hold).
+        self._rollout_disturbance = torch.zeros(
+            6, dtype=dtype, device=device
+        )
         noise_sigma = torch.diag(torch.tensor(
             self.noise_variance, dtype=dtype, device=device
         ))
@@ -104,17 +111,26 @@ class UR5Tracker:
         return self.dob.d_hat
 
     def _stable_rollout_dynamics(self, state, action, rollout_step):
-        """Return rollout state with storage independent of CUDA Graph buffers.
+        """Roll out sampled actuator torque under the current DOB estimate.
 
-        ``reduce-overhead`` reuses output buffers on CUDA. MPPI passes each
-        output to a separately compiled FK function before invoking the next
-        rollout, so retaining the graph-owned tensor can otherwise trigger an
-        overwritten-output error. The clone intentionally lives outside the
-        compiled function.
+        The plant convention is ``tau_effective = tau_applied - disturbance``.
+        Passing that same effective torque to the prediction model makes MPPI
+        include the required compensation in its optimized actuator command.
+
+        ``reduce-overhead`` may reuse output buffers on CUDA. MPPI passes each
+        output to a separately compiled FK function before the next rollout,
+        so the clone intentionally remains outside the compiled function.
         """
         return self._compiled_rollout_dynamics(
-            state, action, rollout_step
+            state, action - self._rollout_disturbance, rollout_step
         ).clone()
+
+    def _set_rollout_disturbance(self, use_dob: bool) -> None:
+        """Snapshot the current estimate for one MPPI prediction solve."""
+        if use_dob:
+            self._rollout_disturbance.copy_(self.dob.d_hat.detach())
+        else:
+            self._rollout_disturbance.zero_()
 
     def _sync_cost_step(self) -> None:
         self.tracking_cost.episode_step = self.step
@@ -181,10 +197,19 @@ class UR5Tracker:
         return self.ctrl.get_action_sequence()[0]
 
     def run(self, q0: torch.Tensor, capture_samples: bool = False, n_show: int = 50,
-            has_disturbance: bool = False, use_dob: bool = False):
+            has_disturbance: bool = False, use_dob: bool = False,
+            dob_compensation_mode: str = "output"):
         """Run one episode and return state, control, error, and DOB histories."""
+        if dob_compensation_mode not in {"output", "rollout"}:
+            raise ValueError(
+                "dob_compensation_mode must be 'output' or 'rollout'"
+            )
+        use_rollout_disturbance = (
+            use_dob and dob_compensation_mode == "rollout"
+        )
         self.step = 0
         self.dob.reset()
+        self._set_rollout_disturbance(use_rollout_disturbance)
         self.tracking_cost.previous_action.zero_()
         self._sync_cost_step()
         velocity = torch.zeros(6, dtype=self.dtype, device=self.device)
@@ -227,6 +252,7 @@ class UR5Tracker:
             if self.device.type == "cuda":
                 torch.compiler.cudagraph_mark_step_begin()
                 torch.cuda.synchronize(self.device)
+            self._set_rollout_disturbance(use_rollout_disturbance)
             solve_start = time.perf_counter()
             mppi_action = self._mppi_command(state).clamp(
                 self.dynamics.u_min, self.dynamics.u_max
@@ -254,8 +280,17 @@ class UR5Tracker:
             true_disturbance = sinusoidal_disturbance(
                 self.step, self.device, self.dtype
             ) if has_disturbance else torch.zeros_like(mppi_action)
-            commanded = mppi_action + self.dob.d_hat if use_dob else mppi_action
-            applied = commanded.clamp(self.dynamics.u_min, self.dynamics.u_max)
+            # Rollout compensation is already included in the optimized MPPI
+            # command.  Output compensation reproduces the original external
+            # DOB structure and is retained for controlled comparisons.
+            compensation = (
+                self.dob.d_hat
+                if use_dob and dob_compensation_mode == "output"
+                else torch.zeros_like(mppi_action)
+            )
+            applied = (mppi_action + compensation).clamp(
+                self.dynamics.u_min, self.dynamics.u_max
+            )
             previous_state = state.clone()
             effective = (applied - true_disturbance).clamp(
                 self.dynamics.u_min, self.dynamics.u_max
