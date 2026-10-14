@@ -12,6 +12,7 @@ controller:
   mean_update_alpha: 1.0
   seed: 7
   noise_variance: [13.6, 23.8, 13.6, 2.72, 2.72, 0.85]
+  temporal_noise_rho: 0.0
   sqp_max_iterations: 5
   ilqr_max_iterations: 2
 cost:

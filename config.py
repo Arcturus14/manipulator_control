@@ -71,6 +71,8 @@ MPPI_SEED = 7
 LAMBDA = 0.24
 MPPI_MEAN_UPDATE_ALPHA = 1.0
 NOISE_VAR = (13.6, 23.8, 13.6, 2.72, 2.72, 0.85)
+# Horizon-wise correlation of MPPI perturbations. Zero is the legacy sampler.
+TEMPORAL_NOISE_RHO = 0.0
 HORIZON_OBS = 10
 N_SAMPLES_OBS = 136
 SQP_MAX_ITER = 5

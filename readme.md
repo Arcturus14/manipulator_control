@@ -2,6 +2,9 @@
 
 UR5 6축 매니퓰레이터의 Cartesian 궤적 추종 성능을 시뮬레이션하고, **MPPI(Model Predictive Path Integral)**, **iLQR(iterative Linear Quadratic Regulator)**, **비선형 SQP(Sequential Quadratic Programming)** 제어기를 비교하는 프로젝트입니다. 외란, DOB(Disturbance Observer), 이동 장애물을 각각 켜고 끌 수 있으며 실행 결과를 수치 데이터, 정적 그래프, 3D 애니메이션으로 저장·표시합니다.
 
+MPPI의 sampling, 사용자 정의 cost, importance-sampling 보정항과 DOB 모드별
+차이는 [`docs/mppi_cost_function.md`](docs/mppi_cost_function.md)에 정리되어 있습니다.
+
 ![최종 궤적 예시](docs/images/metrics_dashboard.png)
 
 ## 주요 기능
@@ -109,7 +112,7 @@ python simulation_gui.py
 ```
 
 `execute.sh`는 현재 활성 환경의 `python`을 우선 사용합니다. shell에 `python`이
-없으면 `/home/arclab-04/miniconda3/envs/mppi/bin/python`으로 fallback합니다.
+없으면 `/home/arclab-04/miniconda3/envs/manipulator/bin/python`으로 fallback합니다.
 다른 interpreter를 사용하려면 `MANIPULATOR_PYTHON`에 실행 파일 경로를 지정합니다.
 
 GUI는 단일 실행, controller/DOB 비교, benchmark를 지원합니다. 기존
@@ -220,6 +223,42 @@ python main.py benchmark --config configs/benchmark_mean_update.yaml
 
 `output.torque_plot: true`이면 대표 seed의 결과가
 `joint_torques_dob_off.png`와 `joint_torques_dob_on.png`로 저장됩니다.
+
+### MPPI zero-initial input sequence 실험
+
+Model-only DOB-aware 비교는 `python benchmark_model_only_mppi.py`로 실행한다.
+`rollout_model_only`는 `rollout`의 명시적 이름이며 sampling 중심은
+`U_ff + shifted residual`, prediction torque는 `clamp(U_sample)-d_hat`,
+출력은 `clamp(u_mppi)`이다. 전용 benchmark는 CUDA 점검 후 Post-DOB,
+model-only, nominal-shift를 같은 seed로 비교하고
+`results/model_only_rollout_gpu/<fingerprint>/`에 보고서·시계열·그래프를 저장한다.
+동일한 코드·설정·환경의 완전한 결과가 있으면 재사용한다.
+
+후속 원인 분리 실험은 `python benchmark_model_only_ablation.py`로 실행한다.
+Constant/step 외란에 대해 DOB/oracle 추정값, residual terminal zero/hold,
+sample 수 136/544를 비교한다. Oracle은 정확한 현재 외란을 horizon 전체에
+고정하는 진단 조건이다. 실제 사용한 추정값은 `d_hat_used`에 저장된다.
+결과 JSON·NPZ와 tracking/diagnostics plot은
+`results/model_only_ablation_gpu/<fingerprint>/`에 저장한다.
+후속 실험의 MD 보고서는 요청할 때 작성하며 이 benchmark는 MD를 생성하지 않는다.
+
+일반 실행의 기본 sampling center는 계속 `U_ff + shifted residual`이다. 비교용
+`zero_initial_shift`는 첫 solve에서 absolute torque sequence 전체를 0으로 두고,
+이후에는 직전 최적 sequence를 한 칸 shift한 뒤 마지막 입력을 0으로 채운다.
+IK inverse-dynamics `U_ff`는 이 모드에서 reference 및 진단용으로만 계산되며
+sampling center에는 들어가지 않는다. 외란 조건도 rollout 변경 없이 기존
+Post-DOB 후보상을 사용한다.
+
+GPU 사전 점검 후 circle 궤적의 명목/Post-DOB 조건을 3개 seed로 비교하고
+보고서와 그래프를 생성하려면 다음을 실행한다.
+
+```bash
+conma
+python benchmark_zero_initial_mppi.py
+```
+
+결과는 `results/mppi_zero_initial_gpu/`에 저장된다. 이 옵션은 실험 API에서
+명시적으로 선택할 때만 활성화되며 GUI와 메인 실행 기본값에는 영향을 주지 않는다.
 
 `alpha=0.9` 전용 순차 튜닝 결과는 기존 기본값을 변경하지 않고
 `configs/mppi_mean_update_alpha09_tuned.yaml`에 분리되어 있습니다. Infinity 궤적,

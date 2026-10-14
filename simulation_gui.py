@@ -254,6 +254,7 @@ class SimulationGUI:
             variable=self.mean_update_enabled_var,
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=3)
         self._entry(mppi, 4, "Noise variance J1..J6", "controller.noise_variance", str, 34)
+        self._entry(mppi, 5, "Temporal noise rho", "controller.temporal_noise_rho")
 
         local = self._section(tab, "Local optimizer", 1, 0)
         self._entry(local, 0, "iLQR max iterations", "controller.ilqr_max_iterations", int)

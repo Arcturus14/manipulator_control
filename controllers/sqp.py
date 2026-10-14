@@ -569,11 +569,9 @@ class UR5SQPTracker:
             true_disturbance = sinusoidal_disturbance(
                 simulation_step, torch.device("cpu"), torch.float64
             ) if has_disturbance else torch.zeros(6, dtype=torch.float64)
-            effective = (applied - true_disturbance).clamp(
-                self.plant.u_min, self.plant.u_max
-            )
+            effective = applied - true_disturbance
             previous = state.clone()
-            state = self.plant.plant_step(
+            state = self.plant.plant_step_effective(
                 state.unsqueeze(0), effective.unsqueeze(0)
             )[0]
             if use_dob:

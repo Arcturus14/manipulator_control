@@ -83,6 +83,10 @@ def validate_config(cfg: dict[str, Any]) -> None:
         raise ValueError("SQP and iLQR max iterations must be positive")
     if len(cfg["controller"]["noise_variance"]) != 6:
         raise ValueError("controller.noise_variance must contain six values")
+    temporal_noise_rho = cfg["controller"]["temporal_noise_rho"]
+    if (not isinstance(temporal_noise_rho, Real)
+            or not 0.0 <= temporal_noise_rho <= 1.0):
+        raise ValueError("controller.temporal_noise_rho must be in [0, 1]")
     if cfg["obstacle"]["mode"] not in {"none", "static", "dynamic"}:
         raise ValueError("obstacle.mode must be none, static, or dynamic")
     if cfg["comparison"]["type"] not in {"controller", "dob"}:
@@ -147,6 +151,7 @@ def apply_runtime_config(cfg: dict[str, Any]) -> None:
     runtime.MPPI_MEAN_UPDATE_ALPHA = float(ctrl["mean_update_alpha"])
     runtime.MPPI_SEED = int(ctrl["seed"])
     runtime.NOISE_VAR = tuple(float(v) for v in ctrl["noise_variance"])
+    runtime.TEMPORAL_NOISE_RHO = float(ctrl["temporal_noise_rho"])
     runtime.SQP_MAX_ITER = int(ctrl["sqp_max_iterations"])
     runtime.ILQR_MAX_ITER = int(ctrl["ilqr_max_iterations"])
 

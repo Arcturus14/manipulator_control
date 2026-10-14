@@ -187,19 +187,40 @@ class UR5Dynamics:
 
     def rollout(self, state: torch.Tensor, action: torch.Tensor, _step: int = 0) -> torch.Tensor:
         """Fast semi-implicit Euler step used for thousands of MPPI rollouts."""
-        torque = action.clamp(self.u_min, self.u_max)
-        acceleration = self.forward_dynamics(state, torque)
+        return self.rollout_effective(
+            state, action.clamp(self.u_min, self.u_max), _step
+        )
+
+    def rollout_effective(self, state: torch.Tensor, effective_torque: torch.Tensor,
+                          _step: int = 0) -> torch.Tensor:
+        """Roll out an already composed actuator-minus-disturbance torque.
+
+        Actuator saturation must be applied before an external disturbance is
+        subtracted.  The resulting generalized torque is not actuator output
+        and therefore must not be clamped to the actuator limits again.
+        """
+        acceleration = self.forward_dynamics(state, effective_torque)
         next_velocity = (state[..., 6:] + self.dt * acceleration).clamp(-DQ_MAX, DQ_MAX)
         next_position = state[..., :6] + self.dt * next_velocity
         return torch.cat((next_position, next_velocity), dim=-1)
 
     def plant_step(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
-        """Higher-accuracy RK4 step for the single simulated UR5 plant."""
-        torque = action.clamp(self.u_min, self.u_max)
-        k1 = self.state_derivative(state, torque)
-        k2 = self.state_derivative(state + 0.5 * self.dt * k1, torque)
-        k3 = self.state_derivative(state + 0.5 * self.dt * k2, torque)
-        k4 = self.state_derivative(state + self.dt * k3, torque)
+        """RK4 step for an actuator command, including actuator saturation."""
+        return self.plant_step_effective(
+            state, action.clamp(self.u_min, self.u_max)
+        )
+
+    def plant_step_effective(self, state: torch.Tensor,
+                             effective_torque: torch.Tensor) -> torch.Tensor:
+        """RK4 step for torque after external disturbance composition."""
+        k1 = self.state_derivative(state, effective_torque)
+        k2 = self.state_derivative(
+            state + 0.5 * self.dt * k1, effective_torque
+        )
+        k3 = self.state_derivative(
+            state + 0.5 * self.dt * k2, effective_torque
+        )
+        k4 = self.state_derivative(state + self.dt * k3, effective_torque)
         next_state = state + self.dt / 6.0 * (k1 + 2*k2 + 2*k3 + k4)
         return torch.cat((next_state[..., :6],
                           next_state[..., 6:].clamp(-DQ_MAX, DQ_MAX)), dim=-1)

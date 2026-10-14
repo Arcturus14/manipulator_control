@@ -461,11 +461,9 @@ class UR5ILQRTracker:
             true_disturbance = sinusoidal_disturbance(
                 simulation_step, self.device, self.dtype
             ) if has_disturbance else torch.zeros(6, dtype=self.dtype)
-            effective = (applied - true_disturbance).clamp(
-                self.dynamics.u_min, self.dynamics.u_max
-            )
+            effective = applied - true_disturbance
             previous_state = state.clone()
-            state = self.dynamics.plant_step(
+            state = self.dynamics.plant_step_effective(
                 state.unsqueeze(0), effective.unsqueeze(0)
             )[0]
             if use_dob:

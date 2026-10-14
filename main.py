@@ -103,6 +103,7 @@ def _mppi_options(cfg: dict[str, Any]) -> dict[str, Any]:
         "temperature": float(controller["temperature"]),
         "mean_update_alpha": float(controller["mean_update_alpha"]),
         "noise_variance": [float(value) for value in controller["noise_variance"]],
+        "temporal_noise_rho": float(controller["temporal_noise_rho"]),
         "position_weight": float(cost["position"]),
         "terminal_weight": float(cost["terminal"]),
         "smooth_weight": float(

@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import math
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import matplotlib
@@ -46,7 +47,8 @@ from config import (CROSS_EXP_K, CROSS_EXP_W, CROSS_EXP_ZONE, CROSS_MARGIN,
                     MPPI_STATIC_EXP_GAIN, MPPI_STATIC_EXP_WEIGHT,
                     MPPI_STATIC_HORIZON, MPPI_STATIC_MARGIN,
                     MPPI_STATIC_SAMPLES, MPPI_STATIC_ZONE, MPPI_W_POS,
-                    MPPI_W_TERM, NOISE_VAR, N_STEPS, TIMING_WARMUP_STEPS,
+                    MPPI_W_TERM, NOISE_VAR, N_STEPS, TEMPORAL_NOISE_RHO,
+                    TIMING_WARMUP_STEPS,
                     TRAJ_CENTER, TRAJ_RADIUS)
 from controllers.mppi_dob_controller import UR5Tracker
 from costs.obstacle_cost import ObstacleCost
@@ -112,12 +114,17 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
              dynamic_paths: np.ndarray | None = None,
              static_centers: np.ndarray | None = None, *,
              dob_compensation_mode: str = "output",
+             sampling_center_mode: str = "feedforward_residual",
+             disturbance_estimate_mode: str = "dob",
+             residual_terminal_mode: str = "zero",
              seed: int = MPPI_SEED,
              n_samples: int | None = None,
              horizon: int | None = None,
              temperature: float = LAMBDA,
              mean_update_alpha: float = MPPI_MEAN_UPDATE_ALPHA,
              noise_variance: tuple[float, ...] | list[float] = NOISE_VAR,
+             temporal_noise_rho: float = TEMPORAL_NOISE_RHO,
+             disturbance_covariance_gain: float = 0.0,
              position_weight: float = MPPI_W_POS,
              terminal_weight: float = MPPI_W_TERM,
              smooth_weight: float | None = None,
@@ -130,11 +137,17 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
              dynamic_exp_weight: float = CROSS_EXP_W,
              dynamic_exp_gain: float = CROSS_EXP_K,
              dynamic_margin: float = CROSS_MARGIN,
-             dynamic_zone: float = CROSS_EXP_ZONE) -> dict:
+             dynamic_zone: float = CROSS_EXP_ZONE,
+             disturbance_function: Callable | None = None,
+             require_cuda: bool = False) -> dict:
     # MPPI is stochastic. A fixed seed makes controller tuning comparisons
     # reproducible while leaving the sampled-control algorithm unchanged.
     torch.manual_seed(seed)
     target_device = device()
+    if require_cuda and target_device.type != "cuda":
+        raise RuntimeError(
+            "CUDA is required for this MPPI experiment; CPU results are not saved."
+        )
     simulation_dtype = torch.float32
     obstacle = None
     default_horizon = (MPPI_STATIC_HORIZON
@@ -164,6 +177,8 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         horizon=controller_horizon if obstacle is not None else horizon,
         temperature=temperature, mean_update_alpha=mean_update_alpha,
         noise_variance=noise_variance,
+        temporal_noise_rho=temporal_noise_rho,
+        disturbance_covariance_gain=disturbance_covariance_gain,
         position_weight=position_weight,
         terminal_weight=terminal_weight, smooth_weight=smooth_weight,
     )
@@ -173,6 +188,10 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         has_disturbance=has_disturbance,
         use_dob=use_dob,
         dob_compensation_mode=dob_compensation_mode,
+        sampling_center_mode=sampling_center_mode,
+        disturbance_estimate_mode=disturbance_estimate_mode,
+        residual_terminal_mode=residual_terminal_mode,
+        disturbance_function=disturbance_function,
         capture_samples=capture_samples,
         n_show=sample_count,
     )
@@ -193,6 +212,37 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         "has_disturbance": np.asarray(has_disturbance),
         "use_dob": np.asarray(use_dob),
         "dob_compensation_mode": np.asarray(dob_compensation_mode),
+        "sampling_center_mode": np.asarray(sampling_center_mode),
+        "disturbance_estimate_mode": np.asarray(disturbance_estimate_mode),
+        "residual_terminal_mode": np.asarray(residual_terminal_mode),
+        "d_hat_used": np.asarray(tracker.estimate_used_history),
+        "compute_device": np.asarray(str(target_device)),
+        "cuda_device_name": np.asarray(
+            torch.cuda.get_device_name(target_device)
+            if target_device.type == "cuda" else ""
+        ),
+        "u_ff": np.asarray(tracker.feedforward_history),
+        "u_sampling_center": np.asarray(tracker.sampling_center_history),
+        "state_prediction_error": np.asarray(tracker.prediction_error_history),
+        "r_star": np.asarray(tracker.optimized_residual_history),
+        "u_mppi": np.asarray(tracker.mppi_command_history),
+        "u_applied": np.asarray(control),
+        "u_effective_pred": np.asarray(
+            tracker.predicted_effective_torque_history
+        ),
+        "u_effective_actual": np.asarray(
+            tracker.actual_effective_torque_history
+        ),
+        "d_tilde": np.asarray(tracker.disturbance_error_history),
+        "actuator_saturated": np.asarray(tracker.saturation_history),
+        "mppi_weight_ess": np.asarray(tracker.weight_ess_history),
+        "mppi_sample_clamp_fraction": np.asarray(
+            tracker.sample_clamp_fraction_history
+        ),
+        "mppi_active_noise_variance": np.asarray(
+            tracker.active_noise_variance_history
+        ),
+        "q_reference": tracker.joint_reference.detach().cpu().numpy(),
         "use_obstacle": np.asarray(obstacle is not None),
         "obstacle_mode": np.asarray(
             "dynamic" if dynamic_paths is not None else
@@ -204,6 +254,10 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         "mppi_temperature": np.asarray(temperature),
         "mppi_mean_update_alpha": np.asarray(mean_update_alpha),
         "mppi_noise_variance": np.asarray(noise_variance),
+        "mppi_temporal_noise_rho": np.asarray(temporal_noise_rho),
+        "mppi_disturbance_covariance_gain": np.asarray(
+            disturbance_covariance_gain
+        ),
         "mppi_position_weight": np.asarray(position_weight),
         "mppi_terminal_weight": np.asarray(terminal_weight),
         "mppi_smooth_weight": np.asarray(tracker.tracking_cost.smooth_weight),
