@@ -14,7 +14,7 @@ import math
 
 import torch
 
-from config import (B_DAMP, DH_PARAMS, DQ_MAX, DT, GRAVITY, I_EFF,
+from config import (B_DAMP, DH_PARAMS, DT, GRAVITY, I_EFF,
                     JOINT_ARMATURE, LINK_COM, LINK_INERTIA_DIAG, LINK_MASSES,
                     MASS_MATRIX_REGULARIZATION, TAU_MAX)
 
@@ -197,10 +197,12 @@ class UR5Dynamics:
 
         Actuator saturation must be applied before an external disturbance is
         subtracted.  The resulting generalized torque is not actuator output
-        and therefore must not be clamped to the actuator limits again.
+        and therefore must not be clamped to the actuator limits again. Joint
+        position and velocity are not projected; MPPI handles their limits via
+        state costs so this transition remains the discretized dynamics map.
         """
         acceleration = self.forward_dynamics(state, effective_torque)
-        next_velocity = (state[..., 6:] + self.dt * acceleration).clamp(-DQ_MAX, DQ_MAX)
+        next_velocity = state[..., 6:] + self.dt * acceleration
         next_position = state[..., :6] + self.dt * next_velocity
         return torch.cat((next_position, next_velocity), dim=-1)
 
@@ -212,7 +214,7 @@ class UR5Dynamics:
 
     def plant_step_effective(self, state: torch.Tensor,
                              effective_torque: torch.Tensor) -> torch.Tensor:
-        """RK4 step for torque after external disturbance composition."""
+        """Unprojected RK4 step after external disturbance composition."""
         k1 = self.state_derivative(state, effective_torque)
         k2 = self.state_derivative(
             state + 0.5 * self.dt * k1, effective_torque
@@ -222,8 +224,7 @@ class UR5Dynamics:
         )
         k4 = self.state_derivative(state + self.dt * k3, effective_torque)
         next_state = state + self.dt / 6.0 * (k1 + 2*k2 + 2*k3 + k4)
-        return torch.cat((next_state[..., :6],
-                          next_state[..., 6:].clamp(-DQ_MAX, DQ_MAX)), dim=-1)
+        return next_state
 
     def gravity_compensation(self, q: torch.Tensor) -> torch.Tensor:
         zeros = torch.zeros_like(q)

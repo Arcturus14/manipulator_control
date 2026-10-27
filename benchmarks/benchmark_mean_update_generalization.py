@@ -1,6 +1,8 @@
 """Validate the tuned alpha=0.9 MPPI across DOB and obstacle conditions."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import argparse
 import gc
 import json
@@ -12,8 +14,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from benchmark_hardware_mppi import environment_metadata
-from benchmark_mean_update_mppi import torque_smoothness_metrics
+from benchmarks.benchmark_hardware_mppi import environment_metadata
+from benchmarks.benchmark_mean_update_mppi import torque_smoothness_metrics
 from config import DT, HORIZON_OBS, TAU_MAX
 from experiment_runner import run_mppi, waypoints
 from utils.trajectory import chasing_obstacle_paths, static_obstacle_centers

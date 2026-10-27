@@ -6,6 +6,8 @@ the established Post-DOB tracking level.
 """
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import argparse
 import gc
 import hashlib
@@ -18,7 +20,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from benchmark_dob_aware_nominal_shift import cuda_preflight, disturbance_profiles
+from benchmarks.benchmark_dob_aware_nominal_shift import (
+    cuda_preflight,
+    disturbance_profiles,
+)
 from config import D_AMP, DT, NOISE_VAR
 from experiment_runner import run_mppi, waypoints
 from utils.result_cache import environment_spec, source_fingerprint

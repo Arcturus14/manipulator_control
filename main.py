@@ -110,6 +110,9 @@ def _mppi_options(cfg: dict[str, Any]) -> dict[str, Any]:
             cost["obstacle_smoothness"]
             if cfg["obstacle"]["mode"] != "none" else cost["smoothness"]
         ),
+        "joint_position_limit_weight": float(cost["joint_position_limit"]),
+        "joint_velocity_limit_weight": float(cost["joint_velocity_limit"]),
+        "joint_limit_soft_ratio": float(cost["joint_limit_soft_ratio"]),
     }
 
 
@@ -205,26 +208,26 @@ def _benchmark(cfg: dict[str, Any], output: Path) -> None:
     bench = cfg["benchmark"]
     kind = bench["type"]
     if kind == "baseline":
-        from benchmark_mppi import run_benchmark
+        from benchmarks.benchmark_mppi import run_benchmark
         run_benchmark(
             seeds=bench["seeds"], trajectory=bench["trajectories"][0],
             cases=bench["cases"], output=output / "metrics.json",
         )
     elif kind == "static":
-        from benchmark_static_mppi import run_benchmark
+        from benchmarks.benchmark_static_mppi import run_benchmark
         run_benchmark(
             seeds=bench["seeds"], trajectories=bench["trajectories"],
             cases=bench["cases"], output=output / "metrics.json",
             save_result=output / "results.npz" if bench["save_result"] else None,
         )
     elif kind == "dynamic":
-        from benchmark_dynamic_mppi import run_benchmark
+        from benchmarks.benchmark_dynamic_mppi import run_benchmark
         run_benchmark(
             seeds=bench["seeds"], trajectories=bench["trajectories"],
             weights=bench["weights"], output=output / "metrics.json",
         )
     elif kind == "hardware":
-        from benchmark_hardware_mppi import run_benchmark
+        from benchmarks.benchmark_hardware_mppi import run_benchmark
         options = _mppi_options(cfg)
         options.pop("seed", None)
         run_benchmark(
@@ -233,7 +236,7 @@ def _benchmark(cfg: dict[str, Any], output: Path) -> None:
             require_cuda=bool(bench["require_cuda"]), **options,
         )
     elif kind == "mean_update":
-        from benchmark_mean_update_mppi import run_benchmark
+        from benchmarks.benchmark_mean_update_mppi import run_benchmark
         options = _mppi_options(cfg)
         options.pop("seed", None)
         options.pop("mean_update_alpha", None)

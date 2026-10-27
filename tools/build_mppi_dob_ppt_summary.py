@@ -1,6 +1,8 @@
 """Build PPT-ready tables and figures from the three-mode GPU benchmark."""
 from __future__ import annotations
 
+# Offline result-building utility.
+
 import csv
 import hashlib
 import json
@@ -682,7 +684,9 @@ def main() -> None:
         "dataset_fingerprint": stored["fingerprint"],
         "numerical_source_fingerprint": stored["spec"]["source"],
         "benchmark_source_sha256": stored["spec"]["benchmark_source"],
-        "benchmark_script": str(Path("benchmark_model_only_mppi.py").resolve()),
+        "benchmark_script": str(Path(
+            "benchmarks/benchmark_model_only_mppi.py"
+        ).resolve()),
         "export_script": str(Path(__file__).resolve()),
         "source_npz": str(npz_path.resolve()),
         "source_metrics": str(metrics_path.resolve()),

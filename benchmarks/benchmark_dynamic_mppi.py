@@ -1,6 +1,8 @@
 """Benchmark MPPI against the fast reference-chasing dynamic cube."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import gc
 import json
 from pathlib import Path

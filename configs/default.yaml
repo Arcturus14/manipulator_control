@@ -1,6 +1,8 @@
 robot:
   torque_limit: [150.0, 150.0, 150.0, 28.0, 28.0, 28.0]
-  velocity_limit: 6.0
+  joint_position_lower: [-6.283185307179586, -6.283185307179586, -3.141592653589793, -6.283185307179586, -6.283185307179586, -6.283185307179586]
+  joint_position_upper: [6.283185307179586, 6.283185307179586, 3.141592653589793, 6.283185307179586, 6.283185307179586, 6.283185307179586]
+  velocity_limit: 3.141592653589793
   damping: [0.12, 0.12, 0.10, 0.08, 0.08, 0.06]
 simulation:
   dt: 0.02
@@ -23,6 +25,9 @@ cost:
     action: 0.0005
     smoothness: 0.25
     obstacle_smoothness: 0.025
+    joint_limit_soft_ratio: 0.90
+    joint_position_limit: 50000.0
+    joint_velocity_limit: 50000.0
   ilqr:
     position: 1200000.0
     terminal: 4800000.0

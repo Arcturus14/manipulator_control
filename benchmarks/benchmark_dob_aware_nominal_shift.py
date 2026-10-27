@@ -1,6 +1,8 @@
 """GPU-only comparison of baseline, post-DOB, and DOB-aware nominal shift."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import argparse
 import gc
 import json
@@ -12,7 +14,7 @@ from typing import Any, Callable
 import numpy as np
 import torch
 
-from benchmark_hardware_mppi import environment_metadata
+from benchmarks.benchmark_hardware_mppi import environment_metadata
 from config import D_AMP, D_FREQ, DT, TAU_MAX
 from experiment_runner import run_mppi, waypoints
 
@@ -104,6 +106,9 @@ def metrics(data: dict[str, Any]) -> dict[str, Any]:
     joint_error = q - q_reference
     limits = np.asarray(TAU_MAX, dtype=float)
     margin = limits - np.abs(torque)
+    velocity = np.asarray(data["qd"], dtype=float)
+    q_violated = np.asarray(data["joint_position_limit_violated"], dtype=bool)
+    dq_violated = np.asarray(data["joint_velocity_limit_violated"], dtype=bool)
     return {
         "tracking_mean_mm": float(error.mean()),
         "tracking_rmse_mm": float(np.sqrt(np.mean(error ** 2))),
@@ -116,6 +121,9 @@ def metrics(data: dict[str, Any]) -> dict[str, Any]:
         "minimum_torque_margin_nm": float(margin.min()),
         "saturated_steps": int(saturated.sum()),
         "saturated_duration_s": float(saturated.sum() * DT),
+        "joint_velocity_abs_max_rad_s": float(np.abs(velocity).max()),
+        "joint_position_limit_violation_steps": int(q_violated.sum()),
+        "joint_velocity_limit_violation_steps": int(dq_violated.sum()),
         "solve_mean_ms": float(solve_ms.mean()),
         "solve_p95_ms": float(np.percentile(solve_ms, 95)),
         "solve_worst_ms": float(solve_ms.max()),

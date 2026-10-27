@@ -281,6 +281,10 @@ class SimulationGUI:
             frame = self._section(tab, controller.upper(), column, 0)
             for row, (key, label) in enumerate(labels):
                 self._entry(frame, row, label, f"cost.{controller}.{key}")
+            if controller == "mppi":
+                self._entry(frame, len(labels), "Joint position limit", "cost.mppi.joint_position_limit")
+                self._entry(frame, len(labels) + 1, "Joint velocity limit", "cost.mppi.joint_velocity_limit")
+                self._entry(frame, len(labels) + 2, "Limit soft ratio", "cost.mppi.joint_limit_soft_ratio")
 
     def _build_obstacle_tab(self) -> None:
         tab = self.obstacle_tab

@@ -1,6 +1,8 @@
 """GPU-only paired comparison of MPPI horizon-noise correlation settings."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import argparse
 import gc
 import hashlib
@@ -13,7 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from benchmark_dob_aware_nominal_shift import (
+from benchmarks.benchmark_dob_aware_nominal_shift import (
     cuda_preflight,
     disturbance_profiles,
     metrics,

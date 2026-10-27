@@ -1,6 +1,8 @@
 """Compare current and CuRobo-style MPPI mean updates with DOB off and on."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import gc
 import json
 from pathlib import Path
@@ -121,7 +123,10 @@ def run_benchmark(*, seeds: list[int], trajectory: str, alphas: list[float],
                   noise_variance: list[float],
                   temporal_noise_rho: float,
                   position_weight: float, terminal_weight: float,
-                  smooth_weight: float) -> None:
+                  smooth_weight: float,
+                  joint_position_limit_weight: float,
+                  joint_velocity_limit_weight: float,
+                  joint_limit_soft_ratio: float) -> None:
     if len(alphas) != 2 or any(not 0 < alpha <= 1 for alpha in alphas):
         raise ValueError("alphas must contain two values in (0, 1]")
     if not seeds:
@@ -149,6 +154,9 @@ def run_benchmark(*, seeds: list[int], trajectory: str, alphas: list[float],
                     position_weight=position_weight,
                     terminal_weight=terminal_weight,
                     smooth_weight=smooth_weight,
+                    joint_position_limit_weight=joint_position_limit_weight,
+                    joint_velocity_limit_weight=joint_velocity_limit_weight,
+                    joint_limit_soft_ratio=joint_limit_soft_ratio,
                 )
                 row = {
                     "seed": seed,

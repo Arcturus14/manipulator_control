@@ -1,6 +1,8 @@
 """GPU-only comparison of feedforward-centered and zero-initial MPPI."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import argparse
 import gc
 import json
@@ -15,8 +17,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from benchmark_dob_aware_nominal_shift import cuda_preflight
-from benchmark_hardware_mppi import environment_metadata
+from benchmarks.benchmark_dob_aware_nominal_shift import cuda_preflight
+from benchmarks.benchmark_hardware_mppi import environment_metadata
 from config import DT
 from experiment_runner import run_mppi, waypoints
 

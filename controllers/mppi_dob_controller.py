@@ -9,8 +9,9 @@ import torch
 from pytorch_mppi import MPPI
 
 from config import (DT, HORIZON, HORIZON_OBS, LAMBDA,
-                    MPPI_MEAN_UPDATE_ALPHA, MPPI_W_POS, MPPI_W_TERM,
-                    N_SAMPLES, N_SAMPLES_OBS, NOISE_VAR,
+                    JOINT_LIMIT_SOFT_RATIO, MPPI_MEAN_UPDATE_ALPHA,
+                    MPPI_W_DQ_LIMIT, MPPI_W_POS, MPPI_W_Q_LIMIT, MPPI_W_TERM,
+                    N_SAMPLES, N_SAMPLES_OBS, NOISE_VAR, Q_MAX, Q_MIN,
                     TEMPORAL_NOISE_RHO, W_SMOOTH, W_SMOOTH_OBS)
 from costs.obstacle_cost import ObstacleCost
 from costs.tracking_cost import TrackingCost
@@ -135,7 +136,10 @@ class UR5Tracker:
                  disturbance_covariance_gain: float = 0.0,
                  position_weight: float = MPPI_W_POS,
                  terminal_weight: float = MPPI_W_TERM,
-                 smooth_weight: float | None = None):
+                 smooth_weight: float | None = None,
+                 joint_position_limit_weight: float = MPPI_W_Q_LIMIT,
+                 joint_velocity_limit_weight: float = MPPI_W_DQ_LIMIT,
+                 joint_limit_soft_ratio: float = JOINT_LIMIT_SOFT_RATIO):
         self.device, self.dtype = device, dtype
         self.step = 0
         self.obstacle_cost = obstacle_cost
@@ -179,6 +183,8 @@ class UR5Tracker:
             self.waypoints, self.horizon,
             self.dynamics.u_min, self.dynamics.u_max, smooth_weight,
             position_weight, terminal_weight,
+            joint_position_limit_weight, joint_velocity_limit_weight,
+            joint_limit_soft_ratio,
         )
         if obstacle_cost is not None and obstacle_cost.horizon != self.horizon:
             raise ValueError("ObstacleCost horizon must match the obstacle MPPI horizon")
@@ -370,6 +376,7 @@ class UR5Tracker:
         print(f"[MPPI] kernels ready: {time.perf_counter() - warmup_start:.2f} s")
 
         q_history = [state[:6].cpu().numpy()]
+        velocity_history = [state[6:].cpu().numpy()]
         ee_history = [fk_batch(state[:6].unsqueeze(0))[0].cpu().numpy()]
         control_history, error_history = [], []
         sample_history = [] if capture_samples else None
@@ -391,6 +398,10 @@ class UR5Tracker:
         self.weight_ess_history = []
         self.sample_clamp_fraction_history = []
         self.active_noise_variance_history = []
+        self.joint_position_violation_history = []
+        self.joint_velocity_violation_history = []
+        q_min = torch.as_tensor(Q_MIN, dtype=self.dtype, device=self.device)
+        q_max = torch.as_tensor(Q_MAX, dtype=self.dtype, device=self.device)
 
         if use_dob and has_disturbance:
             mode = "DOB + disturbance"
@@ -535,6 +546,13 @@ class UR5Tracker:
             ee = fk_batch(q.unsqueeze(0))[0]
             error_mm = torch.linalg.vector_norm(ee - self.waypoints[self.step]).item() * 1e3
             q_history.append(q.cpu().numpy())
+            velocity_history.append(state[6:].cpu().numpy())
+            self.joint_position_violation_history.append(
+                bool(torch.any((q < q_min) | (q > q_max)).item())
+            )
+            self.joint_velocity_violation_history.append(
+                bool(torch.any(state[6:].abs() > self.tracking_cost.dq_max).item())
+            )
             ee_history.append(ee.cpu().numpy())
             control_history.append(applied.cpu().numpy())
             error_history.append(error_mm)
@@ -572,6 +590,7 @@ class UR5Tracker:
 
         print(f"Mean EE err: {np.mean(error_history):.1f} mm  "
               f"Max: {np.max(error_history):.1f} mm")
+        self.velocity_history = velocity_history
         return (np.asarray(q_history), np.asarray(ee_history),
                 np.asarray(control_history), np.asarray(error_history), sample_history,
                 np.asarray(estimate_history), np.asarray(disturbance_history))

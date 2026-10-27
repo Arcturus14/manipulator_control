@@ -42,8 +42,10 @@ import matplotlib.pyplot as plt
 
 from config import (CROSS_EXP_K, CROSS_EXP_W, CROSS_EXP_ZONE, CROSS_MARGIN,
                     DT, DYNAMIC_OBSTACLE_PHASE_OFFSET, DYNAMIC_OBSTACLE_SIZE,
-                    DYNAMIC_OBSTACLE_SPEED_RATIO, HORIZON_OBS, LAMBDA, MPPI_SEED,
-                    MPPI_MEAN_UPDATE_ALPHA,
+                    DYNAMIC_OBSTACLE_SPEED_RATIO, HORIZON_OBS,
+                    JOINT_LIMIT_SOFT_RATIO, LAMBDA, MPPI_SEED,
+                    MPPI_MEAN_UPDATE_ALPHA, MPPI_W_DQ_LIMIT,
+                    MPPI_W_Q_LIMIT,
                     MPPI_STATIC_EXP_GAIN, MPPI_STATIC_EXP_WEIGHT,
                     MPPI_STATIC_HORIZON, MPPI_STATIC_MARGIN,
                     MPPI_STATIC_SAMPLES, MPPI_STATIC_ZONE, MPPI_W_POS,
@@ -128,6 +130,9 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
              position_weight: float = MPPI_W_POS,
              terminal_weight: float = MPPI_W_TERM,
              smooth_weight: float | None = None,
+             joint_position_limit_weight: float = MPPI_W_Q_LIMIT,
+             joint_velocity_limit_weight: float = MPPI_W_DQ_LIMIT,
+             joint_limit_soft_ratio: float = JOINT_LIMIT_SOFT_RATIO,
              capture_samples: bool = False,
              sample_count: int = 30,
              static_exp_weight: float = MPPI_STATIC_EXP_WEIGHT,
@@ -181,6 +186,9 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         disturbance_covariance_gain=disturbance_covariance_gain,
         position_weight=position_weight,
         terminal_weight=terminal_weight, smooth_weight=smooth_weight,
+        joint_position_limit_weight=joint_position_limit_weight,
+        joint_velocity_limit_weight=joint_velocity_limit_weight,
+        joint_limit_soft_ratio=joint_limit_soft_ratio,
     )
     start = time.perf_counter()
     q, ee, control, error_mm, sample_history, estimate, actual = tracker.run(
@@ -202,6 +210,7 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
     solve_times[:min(TIMING_WARMUP_STEPS, len(solve_times))] = np.nan
     result = {
         "q": q, "ee": ee, "u": control,
+        "qd": np.asarray(tracker.velocity_history),
         "err": error_mm / 1e3, "err_mm": error_mm,
         "d_hat": estimate, "d_true": actual,
         "dob_residual": np.asarray(tracker.dob_residual_history),
@@ -235,6 +244,12 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         ),
         "d_tilde": np.asarray(tracker.disturbance_error_history),
         "actuator_saturated": np.asarray(tracker.saturation_history),
+        "joint_position_limit_violated": np.asarray(
+            tracker.joint_position_violation_history
+        ),
+        "joint_velocity_limit_violated": np.asarray(
+            tracker.joint_velocity_violation_history
+        ),
         "mppi_weight_ess": np.asarray(tracker.weight_ess_history),
         "mppi_sample_clamp_fraction": np.asarray(
             tracker.sample_clamp_fraction_history
@@ -261,6 +276,13 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         "mppi_position_weight": np.asarray(position_weight),
         "mppi_terminal_weight": np.asarray(terminal_weight),
         "mppi_smooth_weight": np.asarray(tracker.tracking_cost.smooth_weight),
+        "mppi_joint_position_limit_weight": np.asarray(
+            joint_position_limit_weight
+        ),
+        "mppi_joint_velocity_limit_weight": np.asarray(
+            joint_velocity_limit_weight
+        ),
+        "mppi_joint_limit_soft_ratio": np.asarray(joint_limit_soft_ratio),
         "static_exp_weight": np.asarray(static_exp_weight),
         "static_exp_gain": np.asarray(static_exp_gain),
         "static_margin": np.asarray(static_margin),

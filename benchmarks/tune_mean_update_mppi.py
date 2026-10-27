@@ -1,6 +1,8 @@
 """Sequentially tune MPPI parameters for mean_update_alpha=0.9."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import argparse
 import gc
 import json
@@ -13,8 +15,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from benchmark_hardware_mppi import environment_metadata
-from benchmark_mean_update_mppi import _metrics
+from benchmarks.benchmark_hardware_mppi import environment_metadata
+from benchmarks.benchmark_mean_update_mppi import _metrics
 from experiment_runner import run_mppi, waypoints
 from visualization.plotters import plot_joint_torques
 

@@ -34,11 +34,11 @@ NUMERICAL_SOURCE_PATHS = (
 )
 
 BENCHMARK_SOURCE = {
-    "baseline": "benchmark_mppi.py",
-    "static": "benchmark_static_mppi.py",
-    "dynamic": "benchmark_dynamic_mppi.py",
-    "hardware": "benchmark_hardware_mppi.py",
-    "mean_update": "benchmark_mean_update_mppi.py",
+    "baseline": "benchmarks/benchmark_mppi.py",
+    "static": "benchmarks/benchmark_static_mppi.py",
+    "dynamic": "benchmarks/benchmark_dynamic_mppi.py",
+    "hardware": "benchmarks/benchmark_hardware_mppi.py",
+    "mean_update": "benchmarks/benchmark_mean_update_mppi.py",
 }
 
 

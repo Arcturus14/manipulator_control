@@ -1,6 +1,8 @@
 """Paired GPU experiment: post-DOB, model-only, and nominal-shift MPPI."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import gc
 import hashlib
 import json
@@ -12,7 +14,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from benchmark_dob_aware_nominal_shift import cuda_preflight, disturbance_profiles, metrics
+from benchmarks.benchmark_dob_aware_nominal_shift import (
+    cuda_preflight,
+    disturbance_profiles,
+    metrics,
+)
 from experiment_runner import run_mppi, waypoints
 from utils.result_cache import environment_spec, source_fingerprint
 
@@ -139,7 +145,7 @@ def main():
               "입력 비용은 actuator command를 평가한다. Post-DOB cost에는 후단 보상량이 포함되지 않는 기존 구조를 유지했다.",
               "GPU preflight, CUDA metadata, no-post-compensation 및 residual 항등식을 각 run에서 검증했다. 동일 fingerprint 결과는 재사용한다.",
               "joint position/velocity limit, workspace limit, self-collision penalty는 후속 작업이며 이번 실험에는 추가하지 않았다.", "",
-              "실행: `/home/arclab-04/miniconda3/envs/manipulator/bin/python -u benchmark_model_only_mppi.py`", ""]
+              "실행: `/home/arclab-04/miniconda3/envs/manipulator/bin/python -u -m benchmarks.benchmark_model_only_mppi`", ""]
     (output / "REPORT.md").write_text("\n".join(lines))
     print("SAVED", output, flush=True)
 

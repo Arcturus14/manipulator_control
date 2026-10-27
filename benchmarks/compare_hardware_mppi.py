@@ -1,6 +1,8 @@
 """Compare two JSON reports produced by benchmark_hardware_mppi.py."""
 from __future__ import annotations
 
+# Benchmark result utility in the benchmarks package.
+
 import argparse
 import copy
 import json

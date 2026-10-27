@@ -83,6 +83,12 @@ def validate_config(cfg: dict[str, Any]) -> None:
         raise ValueError("SQP and iLQR max iterations must be positive")
     if len(cfg["controller"]["noise_variance"]) != 6:
         raise ValueError("controller.noise_variance must contain six values")
+    q_lower = cfg["robot"]["joint_position_lower"]
+    q_upper = cfg["robot"]["joint_position_upper"]
+    if len(q_lower) != 6 or len(q_upper) != 6:
+        raise ValueError("robot joint position limits must contain six values")
+    if any(lower >= upper for lower, upper in zip(q_lower, q_upper)):
+        raise ValueError("every joint position lower limit must be below its upper limit")
     temporal_noise_rho = cfg["controller"]["temporal_noise_rho"]
     if (not isinstance(temporal_noise_rho, Real)
             or not 0.0 <= temporal_noise_rho <= 1.0):
@@ -120,6 +126,12 @@ def validate_config(cfg: dict[str, Any]) -> None:
         )
     if len(cfg["robot"]["torque_limit"]) != 6 or len(cfg["robot"]["damping"]) != 6:
         raise ValueError("robot torque_limit and damping must contain six values")
+    soft_ratio = cfg["cost"]["mppi"]["joint_limit_soft_ratio"]
+    if not isinstance(soft_ratio, Real) or not 0.0 < soft_ratio < 1.0:
+        raise ValueError("cost.mppi.joint_limit_soft_ratio must be in (0, 1)")
+    if (cfg["cost"]["mppi"]["joint_position_limit"] < 0
+            or cfg["cost"]["mppi"]["joint_velocity_limit"] < 0):
+        raise ValueError("MPPI joint-limit weights must be nonnegative")
     if cfg["obstacle"]["count"] < 1:
         raise ValueError("obstacle.count must be positive")
     if cfg["obstacle"]["mode"] == "static" and cfg["obstacle"]["count"] >= steps:
@@ -140,6 +152,8 @@ def apply_runtime_config(cfg: dict[str, Any]) -> None:
     ctrl, costs = cfg["controller"], cfg["cost"]
     obs, experiment = cfg["obstacle"], cfg["experiment"]
     runtime.TAU_MAX = tuple(float(v) for v in robot["torque_limit"])
+    runtime.Q_MIN = tuple(float(v) for v in robot["joint_position_lower"])
+    runtime.Q_MAX = tuple(float(v) for v in robot["joint_position_upper"])
     runtime.DQ_MAX = float(robot["velocity_limit"])
     runtime.B_DAMP = tuple(float(v) for v in robot["damping"])
     runtime.DT = float(sim["dt"])
@@ -154,6 +168,11 @@ def apply_runtime_config(cfg: dict[str, Any]) -> None:
     runtime.TEMPORAL_NOISE_RHO = float(ctrl["temporal_noise_rho"])
     runtime.SQP_MAX_ITER = int(ctrl["sqp_max_iterations"])
     runtime.ILQR_MAX_ITER = int(ctrl["ilqr_max_iterations"])
+    runtime.JOINT_LIMIT_SOFT_RATIO = float(
+        costs["mppi"]["joint_limit_soft_ratio"]
+    )
+    runtime.MPPI_W_Q_LIMIT = float(costs["mppi"]["joint_position_limit"])
+    runtime.MPPI_W_DQ_LIMIT = float(costs["mppi"]["joint_velocity_limit"])
 
     mppi, ilqr, sqp = costs["mppi"], costs["ilqr"], costs["sqp"]
     runtime.MPPI_W_POS, runtime.MPPI_W_TERM = float(mppi["position"]), float(mppi["terminal"])

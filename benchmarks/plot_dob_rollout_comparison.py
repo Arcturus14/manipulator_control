@@ -1,6 +1,8 @@
 """Generate plots comparing output-compensated and DOB-aware-rollout MPPI."""
 from __future__ import annotations
 
+# Benchmark result utility in the benchmarks package.
+
 import argparse
 import json
 from pathlib import Path

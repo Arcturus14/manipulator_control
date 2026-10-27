@@ -1,6 +1,8 @@
 """Paired multi-seed benchmark for baseline and tuned MPPI parameters."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import gc
 import json
 from pathlib import Path

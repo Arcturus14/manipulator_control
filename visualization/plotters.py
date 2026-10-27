@@ -144,6 +144,13 @@ def compute_metrics(data: dict) -> dict:
     if estimate is not None and actual is not None:
         count = min(len(estimate), len(actual))
         dob_rms = float(np.sqrt(np.mean((actual[:count] - estimate[:count]) ** 2)))
+    velocity = np.asarray(data.get("qd", np.empty((0, 6))), dtype=float)
+    q_violated = np.asarray(
+        data.get("joint_position_limit_violated", []), dtype=bool
+    )
+    dq_violated = np.asarray(
+        data.get("joint_velocity_limit_violated", []), dtype=bool
+    )
     return {
         "mean_err_mm": float(np.mean(error) * 1e3),
         "rmse_err_mm": float(np.sqrt(np.mean(error ** 2)) * 1e3),
@@ -153,6 +160,11 @@ def compute_metrics(data: dict) -> dict:
         "mean_solve_ms": float(np.mean(solve_time) * 1e3) if len(solve_time) else 0.0,
         "worst_solve_ms": float(np.max(solve_time) * 1e3) if len(solve_time) else 0.0,
         "dob_rms_nm": dob_rms,
+        "joint_velocity_abs_max_rad_s": (
+            float(np.abs(velocity).max()) if velocity.size else None
+        ),
+        "joint_position_limit_violation_steps": int(q_violated.sum()),
+        "joint_velocity_limit_violation_steps": int(dq_violated.sum()),
     }
 
 

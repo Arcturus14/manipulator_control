@@ -1,6 +1,8 @@
 """Reproducible MPPI throughput benchmark for comparing CUDA machines."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import gc
 import importlib.metadata
 import json
@@ -15,7 +17,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from config import (B_DAMP, DQ_MAX, DT, NOISE_VAR, TAU_MAX,
+from config import (B_DAMP, DQ_MAX, DT, NOISE_VAR, Q_MAX, Q_MIN, TAU_MAX,
                     TIMING_WARMUP_STEPS, W_ACT, W_VEL)
 from experiment_runner import run_mppi, waypoints
 
@@ -118,7 +120,11 @@ def run_benchmark(*, seeds: list[int], trajectory: str, output: Path,
                   noise_variance: list[float],
                   temporal_noise_rho: float,
                   position_weight: float, terminal_weight: float,
-                  smooth_weight: float, require_cuda: bool = True) -> None:
+                  smooth_weight: float,
+                  joint_position_limit_weight: float,
+                  joint_velocity_limit_weight: float,
+                  joint_limit_soft_ratio: float,
+                  require_cuda: bool = True) -> None:
     environment = environment_metadata()
     if require_cuda and not environment["cuda_available"]:
         raise RuntimeError(
@@ -143,6 +149,9 @@ def run_benchmark(*, seeds: list[int], trajectory: str, output: Path,
             temporal_noise_rho=temporal_noise_rho,
             position_weight=position_weight, terminal_weight=terminal_weight,
             smooth_weight=smooth_weight,
+            joint_position_limit_weight=joint_position_limit_weight,
+            joint_velocity_limit_weight=joint_velocity_limit_weight,
+            joint_limit_soft_ratio=joint_limit_soft_ratio,
         )
         solve_ms = np.asarray(data["solve_t"], dtype=float) * 1e3
         solve_ms = solve_ms[np.isfinite(solve_ms)]
@@ -173,7 +182,10 @@ def run_benchmark(*, seeds: list[int], trajectory: str, output: Path,
         },
         "plant": {
             "torque_limit": list(TAU_MAX),
-            "velocity_limit": DQ_MAX,
+            "joint_position_lower": list(Q_MIN),
+            "joint_position_upper": list(Q_MAX),
+            "official_velocity_limit": DQ_MAX,
+            "state_projection": False,
             "damping": list(B_DAMP),
         },
         "mppi": {
@@ -188,6 +200,9 @@ def run_benchmark(*, seeds: list[int], trajectory: str, output: Path,
             "velocity_weight": W_VEL,
             "action_weight": W_ACT,
             "smooth_weight": smooth_weight,
+            "joint_position_limit_weight": joint_position_limit_weight,
+            "joint_velocity_limit_weight": joint_velocity_limit_weight,
+            "joint_limit_soft_ratio": joint_limit_soft_ratio,
         },
         "timing": {
             "kernel_warmup_outside_control_loop": True,

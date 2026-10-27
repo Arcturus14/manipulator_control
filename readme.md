@@ -29,7 +29,7 @@ MPPI의 sampling, 사용자 정의 cost, importance-sampling 보정항과 DOB �
 M(q)qdd + C(q, qd)qd + g(q) + Bqd = tau
 ```
 
-- **MPPI**: `pytorch_mppi`를 이용해 토크 시퀀스를 샘플링하고, 말단 위치 추종·속도·입력·입력 변화·장애물 비용을 최소화합니다. rollout 동역학은 `torch.compile`로 컴파일되며 CUDA가 있으면 자동으로 GPU를 사용합니다.
+- **MPPI**: `pytorch_mppi`를 이용해 토크 시퀀스를 샘플링하고, 말단 위치 추종·속도·입력·입력 변화·관절 위치/속도 제한 접근·장애물 비용을 최소화합니다. 상태는 clamp하지 않고 원래 동역학으로 적분하며, 토크에는 actuator saturation을 유지합니다. Rollout 동역학은 `torch.compile`로 컴파일되며 CUDA가 있으면 자동으로 GPU를 사용합니다.
 - **iLQR**: UR5 비선형 동역학을 반복 선형화하고 Gauss-Newton 비용 근사와 line search로 토크 시퀀스를 갱신합니다. MPPI와 동일한 비용 항을 사용하되 가중치는 `cost.ilqr`에서 독립적으로 관리합니다. 예측에는 컴파일된 semi-implicit 적분을, 실제 플랜트에는 공통 RK4 적분을 사용하며 CPU `float64`로 실행합니다.
 - **SQP**: CasADi로 비선형 OCP를 구성하고 acados의 Full-SQP 및 HPIPM QP solver로 풉니다. SQP 플랜트 계산은 CPU `float64`를 사용합니다.
 - **DOB**: 측정 가속도와 nominal inverse dynamics로 외란 토크를 추정하고 제어 입력에 보상값을 더합니다.
@@ -45,6 +45,9 @@ M(q)qdd + C(q, qd)qd + g(q) + Bqd = tau
 ├── config.py                 # 모델 기본값과 계산 모듈 런타임 상수
 ├── execute.sh                # 환경변수 설정 후 main.py 실행
 ├── experiment_runner.py      # 공통 controller 실행 함수
+├── benchmarks/               # 성능 비교, 튜닝, 실험 및 결과 plot 스크립트
+├── tests/                    # 회귀·단위 테스트
+├── tools/                    # 저장 결과를 가공하는 오프라인 보고서 도구
 ├── controllers/
 │   ├── mppi_dob_controller.py
 │   ├── ilqr.py
@@ -58,6 +61,11 @@ M(q)qdd + C(q, qd)qd + g(q) + Bqd = tau
 ├── c_generated_code_ur5_sqp/ # acados 자동 생성·컴파일 결과
 └── results/<timestamp>/      # 설정, 결과, 지표와 그래프를 묶은 실행 기록
 ```
+
+루트에는 실제 실행 진입점과 공통 설정만 둡니다. 개별 실험은 저장소 루트에서
+`python -m benchmarks.<모듈명>`으로, 테스트는
+`python -m unittest discover -v`로 실행합니다. 보고서 생성 도구도 같은 방식으로
+`python -m tools.<모듈명>`을 사용합니다.
 
 ## 실행 환경
 
@@ -198,7 +206,8 @@ GUI의 `Plot disturbance estimation error |d - d_hat|` 또는 CLI의
 `d_hat`을 더하는 외부 후보상(`dob_compensation_mode="output"`)을 사용합니다.
 DOB 추정값을 rollout 동역학의 `tau_effective = tau_sample - d_hat`에 반영하고
 출력 후보상을 생략하는 방식은 테스트 전용입니다. 이 방식은
-`benchmark_dob_rollout_comparison.py`와 `plot_dob_rollout_comparison.py`에서만
+`benchmarks/benchmark_dob_rollout_comparison.py`와
+`benchmarks/plot_dob_rollout_comparison.py`에서만
 `dob_compensation_mode="rollout"`을 명시해 비교할 수 있습니다. SQP와 iLQR의
 DOB 보상 구조는 이 실험 기능의 영향을 받지 않습니다.
 
@@ -226,7 +235,8 @@ python main.py benchmark --config configs/benchmark_mean_update.yaml
 
 ### MPPI zero-initial input sequence 실험
 
-Model-only DOB-aware 비교는 `python benchmark_model_only_mppi.py`로 실행한다.
+Model-only DOB-aware 비교는
+`python -m benchmarks.benchmark_model_only_mppi`로 실행한다.
 `rollout_model_only`는 `rollout`의 명시적 이름이며 sampling 중심은
 `U_ff + shifted residual`, prediction torque는 `clamp(U_sample)-d_hat`,
 출력은 `clamp(u_mppi)`이다. 전용 benchmark는 CUDA 점검 후 Post-DOB,
@@ -234,7 +244,8 @@ model-only, nominal-shift를 같은 seed로 비교하고
 `results/model_only_rollout_gpu/<fingerprint>/`에 보고서·시계열·그래프를 저장한다.
 동일한 코드·설정·환경의 완전한 결과가 있으면 재사용한다.
 
-후속 원인 분리 실험은 `python benchmark_model_only_ablation.py`로 실행한다.
+후속 원인 분리 실험은
+`python -m benchmarks.benchmark_model_only_ablation`으로 실행한다.
 Constant/step 외란에 대해 DOB/oracle 추정값, residual terminal zero/hold,
 sample 수 136/544를 비교한다. Oracle은 정확한 현재 외란을 horizon 전체에
 고정하는 진단 조건이다. 실제 사용한 추정값은 `d_hat_used`에 저장된다.
@@ -254,7 +265,7 @@ GPU 사전 점검 후 circle 궤적의 명목/Post-DOB 조건을 3개 seed로 �
 
 ```bash
 conma
-python benchmark_zero_initial_mppi.py
+python -m benchmarks.benchmark_zero_initial_mppi
 ```
 
 결과는 `results/mppi_zero_initial_gpu/`에 저장된다. 이 옵션은 실험 API에서
@@ -274,10 +285,11 @@ python main.py run --config configs/mppi_mean_update_alpha09_tuned.yaml \
   --dob --disturbance
 
 # 튜닝 탐색과 3-seed 최종 비교 재실행
-python tune_mean_update_mppi.py --output results/mean_update_tuning_alpha09
+python -m benchmarks.tune_mean_update_mppi \
+  --output results/mean_update_tuning_alpha09
 
 # 무장애/정적/동적 장애물 × 3개 외란/DOB 조건 일반화 검증
-python benchmark_mean_update_generalization.py \
+python -m benchmarks.benchmark_mean_update_generalization \
   --output results/mean_update_generalization_gpu_gtx1650 \
   --require-cuda
 ```
@@ -316,7 +328,7 @@ MPPI `K=136`, `T=10`을 seed 3개로 반복합니다. 커널 컴파일은 각 ru
 두 장비의 `metrics.json`을 한곳에 복사한 뒤 조건 검증과 속도비를 계산합니다.
 
 ```bash
-python compare_hardware_mppi.py \
+python -m benchmarks.compare_hardware_mppi \
   results/gtx1650/metrics.json results/rtx3050/metrics.json \
   --output results/hardware_comparison.json
 ```

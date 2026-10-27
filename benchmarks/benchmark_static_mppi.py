@@ -1,6 +1,8 @@
 """Evaluate MPPI parameter candidates on reference-indexed static cubes."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import gc
 import json
 from pathlib import Path

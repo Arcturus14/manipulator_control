@@ -1,6 +1,8 @@
 """GPU oracle/terminal/sample-budget ablation. Saves data and plots, no MD."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import gc
 import hashlib
 import json
@@ -12,7 +14,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from benchmark_dob_aware_nominal_shift import cuda_preflight, disturbance_profiles, metrics
+from benchmarks.benchmark_dob_aware_nominal_shift import (
+    cuda_preflight,
+    disturbance_profiles,
+    metrics,
+)
 from experiment_runner import run_mppi, waypoints
 from utils.result_cache import environment_spec, source_fingerprint
 

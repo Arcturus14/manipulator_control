@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# Unit tests are collected from the tests package.
+
 import copy
 import json
 import tempfile

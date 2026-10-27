@@ -19,7 +19,9 @@ DH_PARAMS = (
     (0.0, 0.0823, 0.0, 0.0),
 )
 
-# Joint-space limits and viscous friction
+# Joint-space limits and viscous friction.  Values follow the official UR5/CB3
+# description (UR5 User Manual v3.13): position limits are +/-360 deg except
+# the elbow planning limit (+/-180 deg), and all velocity limits are 180 deg/s.
 I_EFF = (3.70, 8.40, 2.30, 1.20, 1.40, 0.30)
 # Reflected motor/gear inertia added to the rigid-link mass matrix. This is
 # essential for a geared manipulator and prevents unrealistically large wrist
@@ -27,7 +29,11 @@ I_EFF = (3.70, 8.40, 2.30, 1.20, 1.40, 0.30)
 JOINT_ARMATURE = I_EFF
 B_DAMP = (0.12, 0.12, 0.10, 0.08, 0.08, 0.06)
 TAU_MAX = (150.0, 150.0, 150.0, 28.0, 28.0, 28.0)
-DQ_MAX = 6.0
+Q_MIN = (-2 * math.pi, -2 * math.pi, -math.pi,
+         -2 * math.pi, -2 * math.pi, -2 * math.pi)
+Q_MAX = (2 * math.pi, 2 * math.pi, math.pi,
+         2 * math.pi, 2 * math.pi, 2 * math.pi)
+DQ_MAX = math.pi
 
 # UR5 rigid-body inertial parameters in the modified-DH link frames.
 # Values follow the public UR5/ur_description inertial model; inertia tensors
@@ -83,6 +89,11 @@ MPPI_W_POS = 1_200_000.0
 MPPI_W_TERM = 3_600_000.0
 W_ACT = 0.0005
 W_VEL = 5.0
+# State-limit penalties start at 90% of each official limit and are normalized
+# so the configured weight is the cost of reaching the hard limit per joint.
+JOINT_LIMIT_SOFT_RATIO = 0.90
+MPPI_W_Q_LIMIT = 50_000.0
+MPPI_W_DQ_LIMIT = 50_000.0
 # Obstacle-free MPPI input smoothing.  The cost contains the previous-command
 # boundary and the mean delta-torque penalty across the complete horizon.  A
 # GTX 1650, three-seed Infinity sweep selected 0.25 as the torque/tracking

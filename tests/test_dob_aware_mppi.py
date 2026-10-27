@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# Unit tests are collected from the tests package.
+
 import inspect
 import unittest
 from types import SimpleNamespace

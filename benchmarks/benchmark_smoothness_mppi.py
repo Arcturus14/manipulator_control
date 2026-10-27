@@ -1,6 +1,8 @@
 """Benchmark obstacle-free MPPI input-smoothness weights."""
 from __future__ import annotations
 
+# Executable experiment module in the benchmarks package.
+
 import argparse
 import gc
 import json
@@ -11,8 +13,8 @@ from typing import Any
 import numpy as np
 import torch
 
-from benchmark_hardware_mppi import environment_metadata
-from benchmark_mean_update_mppi import _metrics
+from benchmarks.benchmark_hardware_mppi import environment_metadata
+from benchmarks.benchmark_mean_update_mppi import _metrics
 from experiment_runner import run_mppi, waypoints
 
 

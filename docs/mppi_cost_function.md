@@ -93,10 +93,47 @@ J_{\mathrm{vel},k}
 \qquad w_v=5.0.
 \]
 
-이 항은 속도를 작게 만드는 quadratic regularizer이다. Joint velocity limit을 직접
-표현하는 hard constraint 또는 limit violation penalty는 아니다.
+이 항은 속도를 작게 만드는 quadratic regularizer이며, 아래의 limit 접근 penalty와
+별개의 항이다.
 
-### 2.4 이전 command와 첫 predicted command의 경계 smoothness
+### 2.4 관절 위치·속도 제한 접근 비용
+
+공식 UR5/CB3 description의 관절 위치 한계는
+
+\[
+q_{\max}=(2\pi,2\pi,\pi,2\pi,2\pi,2\pi),\qquad q_{\min}=-q_{\max}
+\]
+
+이고, 전 관절 속도 한계는
+
+\[
+\dot q_{\max}=\pi\ \mathrm{rad/s}
+\]
+
+이다. 각 한계의 $r=0.9$ 지점부터 다음 정규화된 soft penalty를 부과한다.
+수치는 Universal Robots의
+[`config/ur5/joint_limits.yaml`](https://github.com/UniversalRobots/Universal_Robots_ROS2_Description/blob/rolling/config/ur5/joint_limits.yaml)을 따른다.
+이 파일에서 elbow의 $\pm\pi$는 물리적 회전 가능 범위 전체가 아니라 planning 문제를
+피하기 위해 명시적으로 축소한 공식 description 한계다.
+
+\[
+J_{q,\lim}=w_{q,\lim}\sum_j\left[
+\left(\frac{\max(rq_{j,\min}-q_j,0)}{(1-r)|q_{j,\min}|}\right)^2+
+\left(\frac{\max(q_j-rq_{j,\max},0)}{(1-r)q_{j,\max}}\right)^2
+\right]
+\]
+
+\[
+J_{\dot q,\lim}=w_{\dot q,\lim}\sum_j
+\left(\frac{\max(|\dot q_j|-r\dot q_{j,\max},0)}
+{(1-r)\dot q_{j,\max}}\right)^2.
+\]
+
+기본값은 $w_{q,\lim}=w_{\dot q,\lim}=50{,}000$이다. 두 항 모두 running과
+terminal state에 적용한다. 상태 전이는 더 이상 $q$ 또는 $\dot q$를 clamp하지 않으며,
+실제 한계 초과는 결과의 violation 필드에 기록한다.
+
+### 2.5 이전 command와 첫 predicted command의 경계 smoothness
 
 \[
 J_{\mathrm{boundary},k}
@@ -110,7 +147,7 @@ J_{\mathrm{boundary},k}
   포함되지 않는다. 즉 이 항은 직전 최종 applied actuator torque와의 차이를 정확히
   계산하지 않는다.
 
-### 2.5 Horizon 내부 torque smoothness
+### 2.6 Horizon 내부 torque smoothness
 
 \[
 J_{\Delta u,k}
@@ -122,7 +159,7 @@ J_{\Delta u,k}
 Sampled input sequence의 horizon 내부 모든 torque 변화를 평가한다. $T-1$로 나누므로
 horizon 길이가 달라졌을 때 transition 개수만으로 비용이 선형 증가하지 않는다.
 
-### 2.6 Terminal tracking cost
+### 2.7 Terminal tracking cost
 
 \[
 J_{\mathrm{terminal},k}
@@ -132,7 +169,7 @@ J_{\mathrm{terminal},k}
 
 최종 state에 대해 Cartesian position error를 다시 강하게 평가한다.
 
-### 2.7 장애물 비용
+### 2.8 장애물 비용
 
 장애물이 활성화되면 running cost와 terminal cost에 end-effector barrier가 추가된다.
 Cube 중심을 $c$, half-size를 $h$, end-effector 위치를 $p$라 하면 cube 표면까지의
@@ -177,10 +214,12 @@ J_k^{\mathrm{user}}
 \|p(q_{k,t+1})-p^{\mathrm{ref}}_{s+t}\|_2^2\\
 &+w_u\sum_{t=0}^{T-1}\|u_{k,t}\|_2^2
 +w_v\sum_{t=0}^{T-1}\|\dot q_{k,t+1}\|_2^2\\
+&+\sum_{t=0}^{T-1}(J_{q,\lim,t+1}+J_{\dot q,\lim,t+1})\\
 &+w_s\|u_{k,0}-u_{\mathrm{prev}}\|_2^2\\
 &+\frac{w_s}{T-1}\sum_{t=0}^{T-2}
 \|u_{k,t+1}-u_{k,t}\|_2^2\\
-&+w_T\|p(q_{k,T})-p^{\mathrm{ref}}_{s+T}\|_2^2.
+&+w_T\|p(q_{k,T})-p^{\mathrm{ref}}_{s+T}\|_2^2\\
+&+J_{q,\lim,T}+J_{\dot q,\lim,T}.
 \end{aligned}
 \]
 
@@ -268,23 +307,22 @@ cost가 다를 수 있으며, optimizer도 후보상 후의 saturation을 직접
 
 현재 MPPI tracking cost에는 다음 항이 없다.
 
-- Joint position limit penalty
-- Joint velocity limit violation penalty
 - Cartesian workspace limit penalty
 - Robot link와 self-collision penalty
 - End-effector orientation tracking cost
 - DOB 추정 불확실성 또는 \(\hat d\) 변화 예측 cost
 
 Actuator torque는 sample과 최종 command에 clamp되지만, 외란을 차감한 effective torque는
-actuator 출력이 아니므로 다시 clamp하지 않는다. Joint velocity quadratic cost는
-존재하지만 velocity limit constraint를 대신하지 않는다.
+actuator 출력이 아니므로 다시 clamp하지 않는다. 관절 상태는 원래 동역학으로 적분하며
+clamp하지 않는다. 위치·속도 제한은 soft penalty이므로 hard feasibility를 수학적으로
+보장하지 않으며 실제 초과 여부를 별도로 기록한다.
 
 ## 8. 구현 위치
 
 | 내용 | 파일 |
 |---|---|
 | MPPI 구성, DOB rollout, nominal sequence | `controllers/mppi_dob_controller.py` |
-| Tracking, velocity, torque, smoothness | `costs/tracking_cost.py` |
+| Tracking, state limits, velocity, torque, smoothness | `costs/tracking_cost.py` |
 | Static/dynamic obstacle barrier | `costs/obstacle_cost.py` |
 | 가중치와 covariance 기본값 | `config.py` |
 | Sampling, correction cost, weighting | 설치된 `pytorch_mppi` package의 `mppi.py` |

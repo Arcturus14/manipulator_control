@@ -1,6 +1,8 @@
 """Combine validated tuned model-only metrics with existing paired baselines."""
 from __future__ import annotations
 
+# Offline result-building utility.
+
 import csv
 import json
 from pathlib import Path
