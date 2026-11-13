@@ -1,0 +1,6 @@
+# Optional dependencies for official-mesh screening and experimental 26-DOP cost.
+# Install in the manipulator environment; /tmp/kroc_collision_deps is also supported.
+python-fcl==0.7.0.11
+trimesh==5.2.0
+scipy==1.15.3
+PyYAML==6.0.3

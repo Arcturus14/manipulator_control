@@ -144,7 +144,12 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
              dynamic_margin: float = CROSS_MARGIN,
              dynamic_zone: float = CROSS_EXP_ZONE,
              disturbance_function: Callable | None = None,
-             require_cuda: bool = False) -> dict:
+             require_cuda: bool = False,
+             tracker_class: type[UR5Tracker] = UR5Tracker,
+             tracker_options: dict | None = None,
+             compile_rollout_loop: bool = False,
+             initial_q: np.ndarray | torch.Tensor | None = None,
+             initial_qd: np.ndarray | torch.Tensor | None = None) -> dict:
     # MPPI is stochastic. A fixed seed makes controller tuning comparisons
     # reproducible while leaving the sampled-control algorithm unchanged.
     torch.manual_seed(seed)
@@ -176,7 +181,7 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
             exp_gain=dynamic_exp_gain,
             exp_zone=dynamic_zone,
         )
-    tracker = UR5Tracker(
+    tracker = tracker_class(
         reference, target_device, dtype=simulation_dtype,
         obstacle_cost=obstacle, n_samples=controller_samples,
         horizon=controller_horizon if obstacle is not None else horizon,
@@ -189,10 +194,29 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         joint_position_limit_weight=joint_position_limit_weight,
         joint_velocity_limit_weight=joint_velocity_limit_weight,
         joint_limit_soft_ratio=joint_limit_soft_ratio,
+        compile_rollout_loop=compile_rollout_loop,
+        **(tracker_options or {}),
     )
     start = time.perf_counter()
+    if initial_q is None:
+        q0 = initial_configuration(reference, target_device)
+    else:
+        q0 = torch.as_tensor(
+            initial_q, dtype=simulation_dtype, device=target_device
+        )
+        if q0.shape != (6,) or not torch.isfinite(q0).all():
+            raise ValueError("initial_q must contain six finite joint values")
+    if initial_qd is None:
+        qd0 = torch.zeros(6, dtype=simulation_dtype, device=target_device)
+    else:
+        qd0 = torch.as_tensor(
+            initial_qd, dtype=simulation_dtype, device=target_device
+        )
+        if qd0.shape != (6,) or not torch.isfinite(qd0).all():
+            raise ValueError("initial_qd must contain six finite joint values")
     q, ee, control, error_mm, sample_history, estimate, actual = tracker.run(
-        initial_configuration(reference, target_device),
+        q0,
+        initial_velocity=qd0,
         has_disturbance=has_disturbance,
         use_dob=use_dob,
         dob_compensation_mode=dob_compensation_mode,
@@ -215,8 +239,25 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         "d_hat": estimate, "d_true": actual,
         "dob_residual": np.asarray(tracker.dob_residual_history),
         "dob_tau_model": np.asarray(tracker.dob_model_torque_history),
+        "dob_acceleration_raw": np.asarray(
+            tracker.dob_raw_acceleration_history
+        ),
+        "dob_acceleration_filtered": np.asarray(
+            tracker.dob_filtered_acceleration_history
+        ),
+        "dob_acceleration_lpf_cutoff_hz": np.asarray(
+            tracker.dob.acceleration_lpf_cutoff_hz
+        ),
+        "dob_alpha": np.asarray(tracker.dob.alpha),
+        "dob_cutoff_hz": np.asarray(
+            np.nan if tracker.dob.cutoff_hz is None else tracker.dob.cutoff_hz
+        ),
+        "dob_filter_discretization": np.asarray(
+            "legacy_euler" if tracker.dob.cutoff_hz is None else "exact_zoh"
+        ),
         "solve_t": solve_times,
         "solve_t_raw": solve_times_raw,
+        "control_cycle_t_raw": np.asarray(tracker.control_cycle_time_history),
         "elapsed": np.asarray(elapsed),
         "has_disturbance": np.asarray(has_disturbance),
         "use_dob": np.asarray(use_dob),
@@ -283,6 +324,9 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
             joint_velocity_limit_weight
         ),
         "mppi_joint_limit_soft_ratio": np.asarray(joint_limit_soft_ratio),
+        "mppi_compile_rollout_loop": np.asarray(compile_rollout_loop),
+        "initial_q": q0.detach().cpu().numpy(),
+        "initial_qd": qd0.detach().cpu().numpy(),
         "static_exp_weight": np.asarray(static_exp_weight),
         "static_exp_gain": np.asarray(static_exp_gain),
         "static_margin": np.asarray(static_margin),

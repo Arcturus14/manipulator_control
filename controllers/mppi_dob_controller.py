@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from pytorch_mppi import MPPI
 
-from config import (DT, HORIZON, HORIZON_OBS, LAMBDA,
+from config import (DOB_ALPHA, DT, HORIZON, HORIZON_OBS, LAMBDA,
                     JOINT_LIMIT_SOFT_RATIO, MPPI_MEAN_UPDATE_ALPHA,
                     MPPI_W_DQ_LIMIT, MPPI_W_POS, MPPI_W_Q_LIMIT, MPPI_W_TERM,
                     N_SAMPLES, N_SAMPLES_OBS, NOISE_VAR, Q_MAX, Q_MIN,
@@ -139,10 +139,17 @@ class UR5Tracker:
                  smooth_weight: float | None = None,
                  joint_position_limit_weight: float = MPPI_W_Q_LIMIT,
                  joint_velocity_limit_weight: float = MPPI_W_DQ_LIMIT,
-                 joint_limit_soft_ratio: float = JOINT_LIMIT_SOFT_RATIO):
+                 joint_limit_soft_ratio: float = JOINT_LIMIT_SOFT_RATIO,
+                 compile_rollout_loop: bool = False,
+                 dob_acceleration_lpf_cutoff_hz: float = 0.0,
+                 dob_alpha: float = DOB_ALPHA,
+                 dob_cutoff_hz: float | None = None):
         self.device, self.dtype = device, dtype
         self.step = 0
         self.obstacle_cost = obstacle_cost
+        self.compile_rollout_loop = bool(compile_rollout_loop)
+        if self.compile_rollout_loop and obstacle_cost is not None:
+            raise ValueError("compiled rollout loop currently supports tracking-only MPPI")
         default_horizon = HORIZON_OBS if obstacle_cost else HORIZON
         self.horizon = default_horizon if horizon is None else horizon
         default_samples = N_SAMPLES_OBS if obstacle_cost else N_SAMPLES
@@ -189,7 +196,11 @@ class UR5Tracker:
         if obstacle_cost is not None and obstacle_cost.horizon != self.horizon:
             raise ValueError("ObstacleCost horizon must match the obstacle MPPI horizon")
 
-        self.dob = TorchDisturbanceObserver(self.dynamics, DT)
+        self.dob = TorchDisturbanceObserver(
+            self.dynamics, DT, alpha=dob_alpha,
+            acceleration_lpf_cutoff_hz=dob_acceleration_lpf_cutoff_hz,
+            cutoff_hz=dob_cutoff_hz,
+        )
         # Keep a fixed-address tensor so every rollout in one MPPI solve sees
         # the latest DOB estimate without forcing torch.compile to specialize
         # on a new Python object after each observer update.  The estimate is
@@ -216,6 +227,19 @@ class UR5Tracker:
             step_dependent_dynamics=True,
             temporal_noise_rho=self.temporal_noise_rho,
         )
+        if self.compile_rollout_loop:
+            # Keep the reference horizon at one fixed address. Updating its
+            # contents outside the compiled graph avoids both data-dependent
+            # indexing and per-control-step graph specialization.
+            self.tracking_cost.reference_window = self.waypoints[
+                :self.horizon + 1
+            ].clone()
+            self.ctrl._compute_rollout_costs_single = torch.compile(
+                self.ctrl._compute_rollout_costs_single,
+                fullgraph=True,
+                options={"triton.cudagraphs": False,
+                         "triton.cudagraph_trees": False},
+            )
 
     @property
     def disturbance_estimate(self) -> torch.Tensor:
@@ -246,6 +270,10 @@ class UR5Tracker:
 
     def _sync_cost_step(self) -> None:
         self.tracking_cost.episode_step = self.step
+        if self.tracking_cost.reference_window is not None:
+            self.tracking_cost.reference_window.copy_(
+                self.waypoints[self.step:self.step + self.horizon + 1]
+            )
         if self.obstacle_cost:
             self.obstacle_cost.episode_step = self.step
 
@@ -315,12 +343,25 @@ class UR5Tracker:
         ))
         return self.ctrl.get_action_sequence()[0]
 
+    def _prepare_solve(self, state: torch.Tensor,
+                       sampling_center: torch.Tensor) -> None:
+        """Optional experiment hook; called inside the timed control solve."""
+
+    def _measure_state(self, true_state: torch.Tensor) -> torch.Tensor:
+        """Return the state available to the controller and observer.
+
+        The default keeps legacy simulations exact. Experiment subclasses can
+        inject sensor noise without contaminating the physical plant state.
+        """
+        return true_state
+
     def run(self, q0: torch.Tensor, capture_samples: bool = False, n_show: int = 50,
             has_disturbance: bool = False, use_dob: bool = False,
             dob_compensation_mode: str = "output",
             sampling_center_mode: str = "feedforward_residual",
             disturbance_estimate_mode: str = "dob",
             residual_terminal_mode: str = "zero",
+            initial_velocity: torch.Tensor | None = None,
             disturbance_function: Callable[[int, torch.device, torch.dtype],
                                            torch.Tensor] | None = None):
         """Run one episode and return state, control, error, and DOB histories."""
@@ -334,10 +375,11 @@ class UR5Tracker:
         if dob_compensation_mode == "rollout_model_only":
             dob_compensation_mode = "rollout"
         if dob_compensation_mode not in {
-                "output", "rollout", "rollout_nominal_shift"}:
+                "output", "rollout", "rollout_nominal_shift",
+                "estimate_only"}:
             raise ValueError(
                 "dob_compensation_mode must be 'output', 'rollout', or "
-                "'rollout_nominal_shift'"
+                "'rollout_nominal_shift', or 'estimate_only'"
             )
         if sampling_center_mode not in {
                 "feedforward_residual", "zero_initial_shift"}:
@@ -364,8 +406,13 @@ class UR5Tracker:
         self._set_rollout_disturbance(use_rollout_disturbance)
         self.tracking_cost.previous_action.zero_()
         self._sync_cost_step()
-        velocity = torch.zeros(6, dtype=self.dtype, device=self.device)
+        velocity = (torch.zeros(6, dtype=self.dtype, device=self.device)
+                    if initial_velocity is None else initial_velocity.to(
+                        device=self.device, dtype=self.dtype))
+        if velocity.shape != (6,) or not torch.isfinite(velocity).all():
+            raise ValueError("initial_velocity must contain six finite values")
         state = torch.cat([q0.to(device=self.device, dtype=self.dtype), velocity])
+        measured_state = self._measure_state(state)
         feedforward = self._feedforward_torque(state[:6])
         residual_sequence = torch.zeros_like(self.ctrl.U)
         shifted_control_sequence = torch.zeros_like(self.ctrl.U)
@@ -381,10 +428,13 @@ class UR5Tracker:
         control_history, error_history = [], []
         sample_history = [] if capture_samples else None
         self.solve_time_history = []
+        self.control_cycle_time_history = []
         estimate_history = [self.dob.d_hat.cpu().numpy().copy()]
         disturbance_history = [np.zeros(6)]
         self.dob_residual_history = [np.zeros(6)]
         self.dob_model_torque_history = [np.zeros(6)]
+        self.dob_raw_acceleration_history = [np.zeros(6)]
+        self.dob_filtered_acceleration_history = [np.zeros(6)]
         self.feedforward_history = []
         self.sampling_center_history = []
         self.optimized_residual_history = []
@@ -415,6 +465,7 @@ class UR5Tracker:
               f"(K={self.n_samples}, T={self.horizon})")
 
         for simulation_step in range(self.episode_steps):
+            cycle_start = time.perf_counter()
             indices = torch.arange(self.horizon, device=self.device) + self.step
             nominal_sequence = feedforward[indices]
             if disturbance_estimate_mode == "oracle":
@@ -448,7 +499,8 @@ class UR5Tracker:
                 torch.compiler.cudagraph_mark_step_begin()
                 torch.cuda.synchronize(self.device)
             solve_start = time.perf_counter()
-            mppi_action = self._mppi_command(state).clamp(
+            self._prepare_solve(measured_state, sampling_center)
+            mppi_action = self._mppi_command(measured_state).clamp(
                 self.dynamics.u_min, self.dynamics.u_max
             )
             if self.device.type == "cuda":
@@ -529,15 +581,17 @@ class UR5Tracker:
             state = self.dynamics.plant_step_effective(
                 state.unsqueeze(0), effective.unsqueeze(0)
             ).squeeze(0)
+            next_measured_state = self._measure_state(state)
             self.prediction_error_history.append(
                 (state - predicted_state).detach().cpu().numpy().copy()
             )
             if use_dob:
                 self.dob.update(
                     applied,
-                    previous_state[:6], previous_state[6:],
-                    state[:6], state[6:],
+                    measured_state[:6], measured_state[6:],
+                    next_measured_state[:6], next_measured_state[6:],
                 )
+            measured_state = next_measured_state
 
             self.tracking_cost.previous_action = mppi_action.detach().clone()
             self.step += 1
@@ -584,6 +638,13 @@ class UR5Tracker:
             disturbance_history.append(true_disturbance.cpu().numpy().copy())
             self.dob_residual_history.append(self.dob.residual.cpu().numpy().copy())
             self.dob_model_torque_history.append(self.dob.tau_model.cpu().numpy().copy())
+            self.dob_raw_acceleration_history.append(
+                self.dob.raw_acceleration.cpu().numpy().copy()
+            )
+            self.dob_filtered_acceleration_history.append(
+                self.dob.filtered_acceleration.cpu().numpy().copy()
+            )
+            self.control_cycle_time_history.append(time.perf_counter() - cycle_start)
             if (simulation_step + 1) % 50 == 0:
                 print(f"  step {simulation_step + 1:>3}/{self.episode_steps}  "
                       f"EE err={error_mm:.1f} mm")

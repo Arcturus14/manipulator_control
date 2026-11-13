@@ -34,6 +34,9 @@ class TrackingCost(BaseCost):
         self.joint_velocity_limit_weight = joint_velocity_limit_weight
         self.joint_limit_soft_ratio = joint_limit_soft_ratio
         self.episode_step = 0
+        # Optional fixed-address horizon buffer for complete-rollout compile.
+        # The normal path remains unchanged unless explicitly enabled.
+        self.reference_window = None
         self.previous_action = torch.zeros_like(u_max)
         self.q_min = torch.as_tensor(Q_MIN, dtype=u_max.dtype, device=u_max.device)
         self.q_max = torch.as_tensor(Q_MAX, dtype=u_max.dtype, device=u_max.device)
@@ -60,7 +63,9 @@ class TrackingCost(BaseCost):
     def running(self, state: torch.Tensor, action: torch.Tensor, step: int) -> torch.Tensor:
         torque = action.clamp(self.u_min, self.u_max)
         ee = fk_batch(state[:, :6])
-        reference = self.waypoints[self.episode_step + step]
+        reference = (self.reference_window[step]
+                     if self.reference_window is not None
+                     else self.waypoints[self.episode_step + step])
         cost = self.position_weight * (ee - reference).square().sum(dim=1)
         cost += W_ACT * torque.square().sum(dim=1)
         cost += W_VEL * state[:, 6:].square().sum(dim=1)
@@ -71,7 +76,9 @@ class TrackingCost(BaseCost):
 
     def terminal(self, states: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
         last_q = states[..., -1, :6].reshape(-1, 6)
-        reference = self.waypoints[self.episode_step + self.horizon]
+        reference = (self.reference_window[self.horizon]
+                     if self.reference_window is not None
+                     else self.waypoints[self.episode_step + self.horizon])
         cost = self.terminal_weight * (fk_batch(last_q) - reference).square().sum(dim=1)
         last_state = states[..., -1, :].reshape(-1, 12)
         cost += self.state_limit_cost(last_state)
