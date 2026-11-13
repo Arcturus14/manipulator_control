@@ -9,4 +9,11 @@ c_generated_code_ur5_sqp/
 results/
 .env
 
+# Generated KRoC deployment snapshots and archives.  Keep the bundle tooling
+# under version control; build_spark_bundle.py recreates these outputs.
+kroc/spark_bundle/source/
+kroc/spark_bundle/reference/
+kroc/spark_bundle/bundle_manifest.json
+kroc/spark_bundle_*.tar.gz
+
 !docs/images/metrics_dashboard.png

@@ -1,0 +1,9 @@
+# PyTorch and Triton MUST come from the ARM64/Blackwell CUDA environment.
+# install_dependencies.py protects their installed versions.
+pytorch-mppi==0.9.1
+python-fcl==0.7.0.11
+trimesh==5.2.0
+numpy>=1.26,<3
+scipy>=1.12,<2
+matplotlib>=3.9,<4
+PyYAML>=6.0,<7

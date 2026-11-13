@@ -1,0 +1,54 @@
+{
+  "noisy_legacy": {
+    "tracking_rmse_mm": {
+      "mean": 3.7394763242996873,
+      "sample_std": 0.05186059297127868
+    },
+    "torque_rate_rms_nm_s": {
+      "mean": 356.1028137207031,
+      "sample_std": 14.21611550668556
+    },
+    "dob_estimation_rmse_nm": {
+      "mean": 2.4914669339108477,
+      "sample_std": 0.16038823553140663
+    },
+    "dob_estimate_rms_nm": {
+      "mean": 2.4914669195810952,
+      "sample_std": 0.16038815729997422
+    },
+    "solve_mean_ms": {
+      "mean": 15.022183843448024,
+      "sample_std": 0.015900971175652978
+    },
+    "solve_p95_ms": {
+      "mean": 15.25066493001456,
+      "sample_std": 0.03011492608973494
+    }
+  },
+  "noisy_exact_8hz": {
+    "tracking_rmse_mm": {
+      "mean": 3.6496353328633426,
+      "sample_std": 0.13271734973924157
+    },
+    "torque_rate_rms_nm_s": {
+      "mean": 283.7634582519531,
+      "sample_std": 5.249947553327264
+    },
+    "dob_estimation_rmse_nm": {
+      "mean": 1.5565868835610006,
+      "sample_std": 0.06745801321690362
+    },
+    "dob_estimate_rms_nm": {
+      "mean": 1.5565868616104126,
+      "sample_std": 0.06745793194515834
+    },
+    "solve_mean_ms": {
+      "mean": 14.984010127578946,
+      "sample_std": 0.014717441190824831
+    },
+    "solve_p95_ms": {
+      "mean": 15.216786022453258,
+      "sample_std": 0.039862532458916564
+    }
+  }
+}
