@@ -133,7 +133,8 @@ class SimulationGUI:
         mode = ttk.LabelFrame(outer, text="Run mode", padding=8, style="Section.TLabelframe")
         mode.pack(fill="x", pady=(0, 8))
         for text, value in (("Single run", "run"), ("Comparison", "compare"), ("Benchmark", "benchmark"),
-                            ("KROC: final N0 vs N1", "input_headroom")):
+                            ("KROC: final N0 vs N1", "input_headroom"),
+                            ("Payload TCP: N0 / N1 / D0", "payload_tcp")):
             ttk.Radiobutton(
                 mode, text=text, value=value, variable=self.command_var,
                 command=self._refresh_state,
@@ -147,10 +148,12 @@ class SimulationGUI:
         self.obstacle_tab = ttk.Frame(self.notebook, padding=10)
         self.benchmark_tab = ttk.Frame(self.notebook, padding=10)
         self.output_tab = ttk.Frame(self.notebook, padding=10)
+        self.payload_tab = ttk.Frame(self.notebook, padding=10)
         for frame, title in (
             (self.experiment_tab, "Experiment"), (self.controller_tab, "Controller"),
             (self.cost_tab, "Costs"), (self.obstacle_tab, "Obstacles"),
             (self.benchmark_tab, "Benchmark"), (self.output_tab, "Output"),
+            (self.payload_tab, "Payload TCP"),
         ):
             self.notebook.add(frame, text=title)
 
@@ -160,10 +163,12 @@ class SimulationGUI:
         self._build_obstacle_tab()
         self._build_benchmark_tab()
         self._build_output_tab()
+        from kroc.payload_gui import build_payload_tab
+        build_payload_tab(self)
         self._build_monitor(outer)
 
         controls = ttk.Frame(outer)
-        controls.pack(fill="x", pady=(10, 0))
+        controls.pack(side='bottom',fill="x", pady=(10, 0),before=self.monitor_frame)
         self.run_button = ttk.Button(controls, text="Run", style="Run.TButton", command=self._start)
         self.run_button.pack(side="left")
         self.stop_button = ttk.Button(controls, text="Stop", command=self._stop, state="disabled")
@@ -248,7 +253,16 @@ class SimulationGUI:
             foreground="#666666",
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
-        from kroc.view_input_headroom import CASES, SCENARIOS, SEEDS, FILTERS
+        try:
+            from kroc.view_input_headroom import CASES, SCENARIOS, SEEDS, FILTERS
+        except ModuleNotFoundError as error:
+            if error.name != 'kroc.view_input_headroom':
+                raise
+            self.headroom_available=False
+            self.headroom_frame=self._section(tab,'Historical KROC viewer unavailable',0,2,colspan=2)
+            ttk.Label(self.headroom_frame,text='The optional historical viewer module is absent. Normal and Payload TCP runs remain available.').grid(row=0,column=0,sticky='w')
+            return
+        self.headroom_available=True
         self.headroom_scenario_var.set(SCENARIOS[self.headroom_scenario_var.get()])
         self.headroom_filter_var.set(FILTERS[self.headroom_filter_var.get()])
         self.headroom_frame = self._section(tab, "KROC final report: N0 vs N1 (2026-11-16)", 0, 2, colspan=2)
@@ -424,7 +438,8 @@ class SimulationGUI:
         log_frame = ttk.LabelFrame(
             parent, text="Execution monitor", padding=8, style="Section.TLabelframe"
         )
-        log_frame.pack(fill="x", pady=(8, 0))
+        self.monitor_frame=log_frame
+        log_frame.pack(side='bottom',fill="x", pady=(8, 0),before=self.notebook)
         columns = ("case", "rmse", "max_error", "mean_time", "worst_time", "dob")
         self.metrics = ttk.Treeview(log_frame, columns=columns, show="headings", height=4)
         headings = (
@@ -524,6 +539,14 @@ class SimulationGUI:
 
     def _load_path(self, path: Path) -> None:
         try:
+            raw=yaml.safe_load(path.read_text())
+            if isinstance(raw,dict) and raw.get('schema_version')==1 and 'payload' in raw:
+                from kroc.payload_gui import load_payload_form
+                load_payload_form(self,raw)
+                self.command_var.set('payload_tcp')
+                self.status_var.set(f'Loaded payload: {path.name}')
+                self._refresh_state()
+                return
             cfg = load_config(path, {})
         except Exception as error:
             messagebox.showerror("Configuration error", str(error), parent=self.root)
@@ -536,7 +559,11 @@ class SimulationGUI:
 
     def _save_yaml(self) -> None:
         try:
-            cfg = self._config_from_form()
+            if self.command_var.get()=='payload_tcp':
+                from kroc.payload_gui import payload_config_from_form
+                cfg,_=payload_config_from_form(self)
+            else:
+                cfg = self._config_from_form()
         except ValueError as error:
             messagebox.showerror("Configuration error", str(error), parent=self.root)
             return
@@ -545,8 +572,11 @@ class SimulationGUI:
             defaultextension=".yaml", filetypes=(("YAML", "*.yaml"),),
         )
         if name:
-            dump_config(cfg, Path(name))
-            self.config = copy.deepcopy(cfg)
+            if self.command_var.get()=='payload_tcp':
+                Path(name).write_text(yaml.safe_dump(cfg,sort_keys=False))
+            else:
+                dump_config(cfg, Path(name))
+                self.config = copy.deepcopy(cfg)
             self.status_var.set(f"Saved: {Path(name).name}")
 
     def _reset_defaults(self) -> None:
@@ -557,7 +587,21 @@ class SimulationGUI:
         self._refresh_state()
 
     def _preview(self) -> None:
+        if self.command_var.get()=='payload_tcp':
+            from kroc.payload_gui import payload_config_from_form
+            try:
+                cfg,extras=payload_config_from_form(self)
+            except ValueError as error:
+                messagebox.showerror('Payload configuration',str(error),parent=self.root)
+                return
+            window=tk.Toplevel(self.root);window.title('Payload TCP configuration');window.geometry('760x680')
+            text=tk.Text(window,wrap='none');text.pack(fill='both',expand=True)
+            text.insert('end',yaml.safe_dump(dict(cfg,gui_execution=extras),sort_keys=False));text.configure(state='disabled')
+            return
         if self.command_var.get() == "input_headroom":
+            if not self.headroom_available:
+                messagebox.showerror('Historical KROC viewer','The optional historical viewer module is absent.',parent=self.root)
+                return
             try:
                 command = self._headroom_command()
             except ValueError as error:
@@ -608,18 +652,22 @@ class SimulationGUI:
             pass
 
         research = self.command_var.get() == "input_headroom"
+        payload_mode=self.command_var.get()=='payload_tcp'
         for path, widget in self.widgets.items():
-            if research:
+            if research or payload_mode:
                 widget.configure(state="normal" if path.startswith("output.") else "disabled")
             elif not path.startswith(("comparison.", "obstacle.static.", "obstacle.dynamic.")):
                 widget.configure(state="readonly" if isinstance(widget, ttk.Combobox) else "normal")
-        for name in ("mode", "seed", "case", "scenario", "filter"):
-            getattr(self, f"headroom_{name}_combo").configure(state="readonly" if research else "disabled")
-        self._refresh_headroom_seeds()
+        if self.headroom_available:
+            for name in ("mode", "seed", "case", "scenario", "filter"):
+                getattr(self, f"headroom_{name}_combo").configure(state="readonly" if research else "disabled")
+            self._refresh_headroom_seeds()
         for tab in (self.controller_tab, self.cost_tab, self.obstacle_tab):
-            self.notebook.tab(tab, state="disabled" if research else "normal")
+            self.notebook.tab(tab, state="disabled" if research or payload_mode else "normal")
         if research:
             self.notebook.select(self.experiment_tab)
+        if payload_mode:
+            self.notebook.select(self.payload_tab)
 
     def _append_log(self, text: str) -> None:
         self.log.configure(state="normal")
@@ -630,7 +678,25 @@ class SimulationGUI:
     def _start(self) -> None:
         if self.process is not None:
             return
+        if self.command_var.get()=='payload_tcp':
+            from kroc.payload_gui import payload_config_from_form,payload_command
+            try:
+                cfg,extras=payload_config_from_form(self)
+                output={k:self.variables['output.'+k].get() for k in
+                    ('root','show','torque_plot','torque_components_plot','disturbance_error_plot','export_csv','capture_samples')}
+                handle=tempfile.NamedTemporaryFile(mode='w',suffix='.yaml',prefix='payload_gui_',delete=False)
+                with handle:yaml.safe_dump(cfg,handle,sort_keys=False)
+                self.temp_config=Path(handle.name)
+                command=payload_command(sys.executable,self.temp_config,extras,cfg['controller']['case'],output)
+            except ValueError as error:
+                messagebox.showerror('Payload configuration',str(error),parent=self.root)
+                return
+            self._launch(command)
+            return
         if self.command_var.get() == "input_headroom":
+            if not self.headroom_available:
+                messagebox.showerror('Historical KROC viewer','The optional historical viewer module is absent. Select Payload TCP for the new model.',parent=self.root)
+                return
             try:
                 command = self._headroom_command()
             except ValueError as error:

@@ -1,0 +1,47 @@
+# Experimental tradeoff only; primary130Nm/3mm target NOT met. DOB/disturbance not yet validated.
+schema_version: 1
+payload:
+  mass_kg: 5.0
+  side_m: 0.06299605249474366
+  center_in_flange_m:
+  - 0.0
+  - 0.0
+  - 0.03149802624737183
+scene:
+  initial_q:
+  - 3.099796342494348
+  - -0.510625220752202
+  - 0.2634630875026722
+  - -1.5222309816389281
+  - -1.6024622745204995
+  - 5.592034923389832
+  duration_s: 24.0
+  period_s: 5.0
+  circle_radius_m: 0.12
+  use_dob: false
+  disturbance_joint: 2
+  disturbance_amplitude_nm: 0.0
+  trajectory: rounded_rectangle_xz
+  rectangle_half_height_m: 0.1
+  rectangle_corner_radius_m: 0.02
+  reference_start_ramp_s: 1.0
+controller:
+  case: N0
+  samples: 136
+  horizon: 10
+  temperature: 64.0
+  noise_variance:
+  - 9.0
+  - 9.0
+  - 9.0
+  - 0.3136
+  - 0.3136
+  - 0.3136
+  q_cutoff_hz: 3.0
+  acceleration_lpf_hz: 6.0
+  payload_collision: true
+  experimental_stabilization:
+    posture_weight: 5000.0
+    boundary_weight: 4.0
+    smooth_weight: 4.0
+output_root: kroc/results/payload_rectangle_workload_20261121/replay

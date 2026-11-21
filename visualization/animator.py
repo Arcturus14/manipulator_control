@@ -29,11 +29,13 @@ def animate_comparison(results: dict, waypoints: np.ndarray,
     axes = [fig.add_subplot(1, len(keys), i + 1, projection="3d") for i in range(len(keys))]
     arms, joints, ee_dots, traces, labels = [], [], [], [], []
     sample_lines, sample_means, local_references = [], [], []
+    cubes, tcp_links = [], []
+    cube_faces=np.array([[0,1,3,2],[4,6,7,5],[0,4,5,1],[2,3,7,6],[0,2,6,4],[1,5,7,3]])
     for axis, key in zip(axes, keys):
         axis.set(xlim=(0.18, 0.62), ylim=(-0.22, 0.22), zlim=(0.13, 0.57),
                  xlabel="X", ylabel="Y", zlabel="Z")
         axis.set_box_aspect((1, 1, 1))
-        axis.set_title(LABELS.get(key, key), color=COLORS.get(key), fontweight="bold")
+        axis.set_title(LABELS.get(key, key), color=COLORS.get(key, '#003f8a'), fontweight="bold")
         axis.plot(*waypoints.T, "--", color="#008844", alpha=0.45)
         if static_obstacle_centers is not None:
             half = STATIC_OBSTACLE_SIZE / 2.0
@@ -73,6 +75,19 @@ def animate_comparison(results: dict, waypoints: np.ndarray,
             sample_means.append(None)
             local_references.append(None)
         axis.view_init(elev=25, azim=-55)
+        vertices=results[key].get('payload_cube_vertices')
+        if vertices is not None:
+            from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+            cube=Poly3DCollection(vertices[0][cube_faces],facecolors='#e6a23c',edgecolors='#754600',alpha=.7)
+            axis.add_collection3d(cube);cubes.append(cube)
+            tcp_links.append(axis.plot([],[],[],color='#e06000',lw=2)[0])
+            points=np.concatenate([np.concatenate([fk_joints_np(q) for q in results[key]['q']]),vertices.reshape(-1,3),waypoints])
+            lo=points.min(0)-.08;hi=points.max(0)+.08
+            axis.set(xlim=(lo[0],hi[0]),ylim=(lo[1],hi[1]),zlim=(min(0,lo[2]),hi[2]))
+            axis.set_box_aspect(hi-np.minimum(lo,[lo[0],lo[1],0]))
+            axis.set_title(f'{key}: payload cube / center TCP')
+        else:
+            cubes.append(None);tcp_links.append(None)
     obstacle_artists = [[] for _ in axes]
 
     def update(frame):
@@ -84,7 +99,12 @@ def animate_comparison(results: dict, waypoints: np.ndarray,
                 points = positions[joint_index:joint_index + 2]
                 segment.set_data(points[:, 0], points[:, 1]); segment.set_3d_properties(points[:, 2])
             joints[index].set_data(positions[:-1, 0], positions[:-1, 1]); joints[index].set_3d_properties(positions[:-1, 2])
-            ee_dots[index].set_data([positions[-1, 0]], [positions[-1, 1]]); ee_dots[index].set_3d_properties([positions[-1, 2]])
+            marker=positions[-1] if cubes[index] is None else results[key]['ee'][frame_index]
+            ee_dots[index].set_data([marker[0]], [marker[1]]); ee_dots[index].set_3d_properties([marker[2]])
+            if cubes[index] is not None:
+                cubes[index].set_verts(results[key]['payload_cube_vertices'][frame_index][cube_faces])
+                link=np.vstack([positions[-1],marker])
+                tcp_links[index].set_data(link[:,0],link[:,1]);tcp_links[index].set_3d_properties(link[:,2])
             ee = results[key]["ee"][:frame_index + 1]
             traces[index].set_data(ee[:, 0], ee[:, 1]); traces[index].set_3d_properties(ee[:, 2])
             error = (results[key]["err_mm"] if "err_mm" in results[key]

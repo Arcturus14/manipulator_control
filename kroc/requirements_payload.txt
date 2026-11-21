@@ -1,0 +1,5 @@
+# Optional collision dependencies used by the existing robot mesh checker.
+# Keep the original Python environment untouched if desired:
+# python -m pip install --no-deps --target /tmp/kroc_collision_deps -r kroc/requirements_payload.txt
+python-fcl==0.7.0.11
+trimesh==5.2.1

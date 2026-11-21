@@ -1,0 +1,28 @@
+# Opt-in extension. Never loaded by the original GUI/default runner.
+schema_version: 1
+payload:
+  mass_kg: 5.0
+  side_m: 0.10
+  # Rigid attachment, cube axes aligned with the existing last-DH-link frame.
+  # Cube bottom face at z=0; object center is the new position TCP.
+  center_in_flange_m: [0.0, 0.0, 0.05]
+scene:
+  # Retain the old initial pose here to isolate the model/TCP change first.
+  # A farther horizontal posture is an editable NEW scene, not selected yet.
+  initial_q: [3.141592653589793, -1.2, 1.2, -1.5, -1.57, 5.592034923389832]
+  duration_s: 6.0
+  period_s: 6.0
+  circle_radius_m: 0.04
+  use_dob: false
+  disturbance_joint: 2
+  disturbance_amplitude_nm: 0.0
+controller:
+  case: N0
+  samples: 136
+  horizon: 10
+  temperature: 64.0
+  noise_variance: [9.0, 9.0, 9.0, 0.3136, 0.3136, 0.3136]
+  q_cutoff_hz: 3.0
+  acceleration_lpf_hz: 6.0
+  payload_collision: true
+output_root: kroc/results/payload_cube_tcp_20261121

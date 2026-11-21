@@ -1,0 +1,40 @@
+# Additional scene; original payload and legacy presets remain unchanged.
+schema_version: 1
+payload:
+  mass_kg: 5.0
+  side_m: 0.1
+  center_in_flange_m:
+  - 0.0
+  - 0.0
+  - 0.05
+scene:
+  initial_q:
+  - 3.141592653589793
+  - -0.5
+  - 0.25
+  - -1.5
+  - -1.57
+  - 5.592034923389832
+  duration_s: 6.0
+  period_s: 6.0
+  circle_radius_m: 0.04
+  use_dob: false
+  disturbance_joint: 2
+  disturbance_amplitude_nm: 0.0
+  trajectory: circle_yz
+controller:
+  case: N0
+  samples: 136
+  horizon: 10
+  temperature: 64.0
+  noise_variance:
+  - 9.0
+  - 9.0
+  - 9.0
+  - 0.3136
+  - 0.3136
+  - 0.3136
+  q_cutoff_hz: 3.0
+  acceleration_lpf_hz: 6.0
+  payload_collision: true
+output_root: kroc/results/payload_cube_tcp_20261121
