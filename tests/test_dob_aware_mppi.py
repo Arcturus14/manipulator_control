@@ -116,6 +116,28 @@ class DobAwareWarmStartTests(unittest.TestCase):
             torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
         ))
 
+    def test_absolute_shift_holds_terminal_without_feedforward(self):
+        optimal = torch.tensor([[1., 2.], [3., 4.], [5., 6.]], requires_grad=True)
+        shifted = shift_control_sequence(optimal, terminal_mode="hold")
+        self.assertTrue(torch.equal(shifted, torch.tensor([[3., 4.], [5., 6.], [5., 6.]])))
+        self.assertFalse(shifted.requires_grad)
+        self.assertTrue(torch.equal(optimal.detach(), torch.tensor([[1., 2.], [3., 4.], [5., 6.]])))
+
+    def test_absolute_shift_single_stage_and_invalid_tail(self):
+        self.assertTrue(torch.equal(shift_control_sequence(torch.tensor([[3.]]), "hold"), torch.tensor([[3.]])))
+        with self.assertRaises(ValueError):
+            shift_control_sequence(torch.ones(2, 1), "unknown")
+
+    def test_ff_residual_shift_matches_absolute_shift_except_terminal(self):
+        ff = torch.tensor([[10., 20.], [11., 21.], [12., 22.], [13., 23.]])
+        optimum = torch.tensor([[8., 18.], [9., 19.], [10., 20.]])
+        residual = recover_residual_sequence(optimum, ff[:3], torch.zeros(2), False)
+        old_center = compose_nominal_sequence(ff[1:], shift_control_sequence(residual), torch.zeros(2), False)
+        new_center = shift_control_sequence(optimum, "hold")
+        self.assertTrue(torch.allclose(old_center[:-1], new_center[:-1]))
+        self.assertTrue(torch.equal(old_center[-1], ff[-1]))
+        self.assertTrue(torch.equal(new_center[-1], optimum[-1]))
+
 
 if __name__ == "__main__":
     unittest.main()

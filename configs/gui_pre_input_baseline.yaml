@@ -1,0 +1,33 @@
+# GUI default: frozen pre-input-study controller; scenario remains editable.
+controller:
+  implementation: research_baseline
+  type: mppi
+  noise_variance: [13.6, 23.8, 13.6, 2.72, 2.72, 0.85]
+  temperature: 1.0
+  temporal_noise_rho: 1.0
+  mean_update_alpha: 1.0
+  samples: 136
+  horizon: 10
+  fuse_costs: true
+  compile_auxiliary: true
+  asynchronous_solve: true
+  require_cuda: true
+experiment:
+  dob: true
+cost:
+  mppi:
+    smoothness: 0.25
+    obstacle_smoothness: 0.25
+    fixed_margin_fraction: 0.025
+    # Retain native normalizers; only the onset uses the fixed full-span margin.
+    joint_limit_soft_ratio: 0.90
+    collision_weight: 50000.0
+    collision_clearance: 0.005
+output:
+  root: kroc/results/gui_pre_input_baseline
+  # Arm animation is kept; per-sample cloud recording is optional overhead.
+  capture_samples: false
+
+observer:
+  q_cutoff_hz: 3.0
+  acceleration_lpf_hz: 0.0

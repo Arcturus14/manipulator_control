@@ -1,0 +1,30 @@
+# New noisy DOB profile. Historical 10/8-Hz reproduction presets are unchanged.
+controller:
+  implementation: legacy
+  noise_variance: [13.6, 23.8, 13.6, 2.72, 2.72, 0.85]
+  type: mppi
+  seed: 2207
+  temporal_noise_rho: 0.0
+  temperature: 0.24
+  require_cuda: true
+experiment:
+  trajectory: circle
+  duration: 8.0
+  dob: true
+  disturbance: true
+measurement:
+  enabled: true
+  position_std_rad: 0.001
+  velocity_std_rad_s: 0.01
+  seed: 97207
+observer:
+  acceleration_lpf_hz: 0.0
+  q_cutoff_hz: 3.0
+cost:
+  mppi:
+    limit_onset: physical
+obstacle:
+  mode: none
+output:
+  root: kroc/results/gui_dob_estimation_tuned
+  show: true

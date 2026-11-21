@@ -1,0 +1,22 @@
+# Confirmed N0 controller; scenario controls remain editable in normal GUI mode.
+controller:
+  implementation: final_n0
+  type: mppi
+  temperature: 64.0
+  noise_variance: [9.0, 9.0, 9.0, 0.3136, 0.3136, 0.3136]
+  temporal_noise_rho: 1.0
+  mean_update_alpha: 1.0
+  samples: 136
+  horizon: 10
+  fuse_costs: false
+  compile_auxiliary: false
+  asynchronous_solve: false
+  require_cuda: true
+observer:
+  q_cutoff_hz: 3.0
+  acceleration_lpf_hz: 6.0
+experiment:
+  dob: true
+output:
+  root: kroc/results/gui_final_n0
+  capture_samples: false

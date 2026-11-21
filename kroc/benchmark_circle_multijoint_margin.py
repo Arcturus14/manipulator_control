@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from benchmarks.benchmark_dob_aware_nominal_shift import cuda_preflight
-from config import DT,Q_MAX,Q_MIN,TAU_MAX
+from config import DT,Q_MAX,Q_MIN,TAU_MAX,LAMBDA
 from experiment_runner import run_mppi
 from kroc.benchmark_noise_aware_state_margin import ACCELERATION_DEADBANDS
 from kroc.benchmark_postdob_small_directional_margin import measure
@@ -41,7 +41,13 @@ def load_circle(bank,candidate,risk_joint):
         'radius':radius,'metadata':c,'risk_joint':risk_joint,'onset':onset}
 
 
-def run_experiment(output,geometry,profiles,seeds,names=('static25','directional25_5','static5')):
+def run_experiment(output,geometry,profiles,seeds,names=('static25','directional25_5','static5'),
+                   case_configs=None,tracker_classes=None,temporal_noise_rho=0.,
+                   temperature=LAMBDA,compile_rollout_loop=True):
+    if not 0<=temporal_noise_rho<=1:raise ValueError('temporal_noise_rho must be in [0, 1]')
+    if not np.isfinite(temperature) or temperature<=0:raise ValueError('temperature must be finite and positive')
+    configs=CASES if case_configs is None else case_configs
+    tracker_classes={} if tracker_classes is None else tracker_classes
     cuda=cuda_preflight();output=Path(output);output.mkdir(parents=True,exist_ok=False)
     q0=geometry['q0'];ref=geometry['reference'];j=geometry['risk_joint']
     span=np.asarray(Q_MAX)-np.asarray(Q_MIN)
@@ -51,7 +57,10 @@ def run_experiment(output,geometry,profiles,seeds,names=('static25','directional
         'observers/dob.py','config.py','kroc/state_margin.py','kroc/search_circle_floor25.py',__file__]
     manifest={'arguments':{'joint':j,'scale':1.,'seeds':list(seeds),'period':8.,'seconds':8.,
         'bank':geometry['bank'],'candidate':geometry['candidate']},'profiles':profiles,
-        'cases':{n:asdict(CASES[n]) for n in names},'cuda':cuda,'headroom_enabled':False,
+        'cases':{n:asdict(configs[n]) for n in names},'cuda':cuda,'headroom_enabled':False,
+        'temporal_noise_rho':float(temporal_noise_rho),
+        'temperature':float(temperature),'compile_rollout_loop':bool(compile_rollout_loop),
+        'tracker_class_per_case':{n:tracker_classes.get(n,CircleTracker).__name__ for n in names},
         'sensor_noise':{'q_std_rad':.001,'dq_std_rad_s':.01},
         'dob':{'acceleration_lpf_hz':10.,'q_hz':8.},
         'collision_cost':{'enabled':True,'backend':'triton','weight':50000.,'clearance_m':.005},
@@ -74,13 +83,13 @@ def run_experiment(output,geometry,profiles,seeds,names=('static25','directional
             for name in names:
                 holder=[]
                 def factory(*args,**kw):
-                    tracker=CircleTracker(*args,**kw);holder.append(tracker);return tracker
+                    tracker=tracker_classes.get(name,CircleTracker)(*args,**kw);holder.append(tracker);return tracker
                 print('MULTI_RUN',profile['name'],'seed',seed,name,vector.tolist(),flush=True)
                 data=run_mppi(ref,initial_q=q0,has_disturbance=bool(np.any(vector)),use_dob=True,
                     disturbance_function=disturbance,dob_compensation_mode='output',
-                    require_cuda=True,seed=seed,temperature=1.,temporal_noise_rho=.8,
-                    compile_rollout_loop=True,joint_position_limit_weight=50000.,joint_velocity_limit_weight=50000.,
-                    tracker_class=factory,tracker_options={'margin_config':asdict(CASES[name]),
+                    require_cuda=True,seed=seed,temperature=temperature,temporal_noise_rho=temporal_noise_rho,
+                    compile_rollout_loop=compile_rollout_loop,joint_position_limit_weight=50000.,joint_velocity_limit_weight=50000.,
+                    tracker_class=factory,tracker_options={'margin_config':asdict(configs[name]),
                         'torque_scale':1.,'collision_weight':50000.,'collision_clearance':.005,
                         'collision_backend':'triton','sensor_noise':{'position_std_rad':.001,
                             'velocity_std_rad_s':.01,'seed':80000+seed},

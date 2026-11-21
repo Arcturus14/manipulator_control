@@ -353,6 +353,8 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
     # does not change the persisted result schema or static plots.
     if sample_history is not None:
         result["_animation_samples"] = sample_history
+    if hasattr(tracker,'export_sensor_data'):
+        result.update(tracker.export_sensor_data())
     return result
 
 

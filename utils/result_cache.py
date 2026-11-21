@@ -31,6 +31,11 @@ NUMERICAL_SOURCE_PATHS = (
     "observers",
     "utils/disturbance.py",
     "utils/trajectory.py",
+    "kroc/sensor_noise.py",
+    "kroc/state_margin.py",
+    "kroc/self_collision_cost.py",
+    "kroc/collision_kernels.py",
+    "kroc/collision_geometry.py",
 )
 
 BENCHMARK_SOURCE = {

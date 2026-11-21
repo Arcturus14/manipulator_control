@@ -1,8 +1,14 @@
 # MPPI 비용함수 구성
 
-이 문서는 현재 저장소의 UR5 MPPI 구현에서 실제로 계산되는 비용을 설명한다.
-대상은 `controllers/mppi_dob_controller.py`, `costs/tracking_cost.py`,
-`costs/obstacle_cost.py`와 Conda `manipulator` 환경의 `pytorch-mppi 0.9.1`이다.
+이 문서는 저장소의 UR5 MPPI 구현에서 계산되는 비용을 설명한다.
+**1–8절은 이전 legacy 구현의 기록**이며, 당시 대상은
+`controllers/mppi_dob_controller.py`, `costs/tracking_cost.py`,
+`costs/obstacle_cost.py`와 Conda `manipulator` 환경의 `pytorch-mppi 0.9.1`이었다.
+그 절의 horizon별 독립 noise, sampled input clamp, sampling 보정항 및 수치를
+현재 기본값에 그대로 적용하면 안 된다.
+
+**현재 기본 `final_n0`와 KROC 최종 N0/N1 비교는 9절을 따른다.**
+9절은 2026-11-17 기준으로 최종 연구에 사용한 예상 clipping 손실 비용과 공통 설정을 정리한다.
 
 ## 1. 기호와 sampling
 
@@ -329,3 +335,185 @@ clamp하지 않는다. 위치·속도 제한은 soft penalty이므로 hard feasi
 
 이 문서는 MPPI 비용을 대상으로 한다. iLQR과 SQP는 유사한 물리적 항을 사용하지만
 optimizer별 가중치와 구현 방식이 다르므로 이 식과 수치를 그대로 적용하면 안 된다.
+
+## 9. 최종 연구 N0/N1: 보상 포함 요청 입력의 예상 clipping 손실 비용
+
+### 9.1 명목 입력, 보상량, 실제 입력의 구분
+
+아래에서는 현재 제어 시점을 $s$, rollout sample을 $k$, horizon 단계를 $t$로 둔다.
+$v_{k,t}$는 MPPI가 최적화하는 **명목 유효 토크**다. 1절의 clamp된 sampled
+actuator command와 구분한다.
+
+N0/N1 모두 명목 sample과 optimizer 출력 $v$를 물리 토크 한계로 clamp하지 않는다.
+Rollout은 다음 명목 모델을 사용한다.
+
+\[
+M(q)\ddot q+h(q,\dot q)=v_{k,t}.
+\]
+
+$h$는 모델의 bias와 damping을 포함한 항이다. Rollout 상태 전이에
+$\hat d$ 또는 actuator saturation을 삽입하지 않는다.
+한 solve가 시작될 때의 causal DOB 보상 snapshot $\hat d_s$를 horizon 전체에
+고정하고, 각 sample의 보상 후 요청 입력을 다음처럼 평가한다.
+
+\[
+a^{\mathrm{req}}_{k,t}=v_{k,t}+\hat d_s.
+\]
+
+실제 제어 주기에 적용하는 입력과 plant의 외란 부호는 다음과 같다.
+
+\[
+u_{\mathrm{app},s}
+=\operatorname{clip}(v_s^*+\hat d_s,u_{\min},u_{\max}),
+\qquad
+M(q)\ddot q+h(q,\dot q)=u_{\mathrm{app},s}-d_s.
+\]
+
+물리 actuator의 최종 clamp는 N0/N1 모두 유지한다.
+
+### 9.2 N1에 추가한 running cost
+
+보상 후 요청 입력 중 물리 clamp 때문에 사라질 부분을
+
+\[
+\delta u^{\mathrm{clip}}_{k,t}
+=a^{\mathrm{req}}_{k,t}
+-\operatorname{clip}
+  (a^{\mathrm{req}}_{k,t},u_{\min},u_{\max})
+\]
+
+로 정의하고, N1은 각 running 단계에 다음 비용을 추가한다.
+
+\[
+\boxed{
+\ell_{\mathrm{clip},k,t}
+=w_{\mathrm{clip}}
+\sum_{j=1}^{6}
+\left(\delta u^{\mathrm{clip}}_{k,t,j}\right)^2
+}
+\]
+
+대칭 토크 한계 $[-\tau_j^{\max},\tau_j^{\max}]$에서는 다음과 같다.
+
+\[
+\ell_{\mathrm{clip},k,t}
+=w_{\mathrm{clip}}\sum_{j=1}^{6}
+\left[\max\left(
+|v_{k,t,j}+\hat d_{s,j}|-\tau_j^{\max},0
+\right)\right]^2.
+\]
+
+- 최종 실험 및 GUI KROC N1 설정은 **$w_{\mathrm{clip}}=1$**이다.
+  연구 클래스 생성자의 기본 인자와 달리, 실행 설정에서 이 값을 명시한다.
+- 물리 한계 안의 요청 입력에는 추가 비용이 0이다. 85% 또는 95%부터
+  시작하는 headroom 비용은 최종 N1에 사용하지 않는다.
+- 이 항은 절대 토크 초과량의 **Nm² 기준**이며, 관절별 torque limit으로
+  정규화하지 않는다. 이전 정규화 headroom 비용의 가중치와 수치만 비교하면 안 된다.
+- 비용 계산의 `clip`은 sample이나 optimizer 출력을 투영하는 연산이 아니다.
+- 미래 horizon 단계의 요청 입력에도 비용을 계산하므로, 현재 실제 입력이
+  포화되기 전에도 미래 초과 요청을 덜 선호하도록 유도할 수 있다.
+  입력 포화 방지나 정확한 추종을 보장하는 항은 아니다.
+
+### 9.3 N0/N1 전체 목적함수에서의 위치
+
+기존 추종·입력·상태·충돌·smoothness 비용을 $J_k^{\mathrm{common}}$이라 하면
+
+\[
+J_k^{\mathrm{N0}}=J_k^{\mathrm{common}},
+\qquad
+\boxed{
+J_k^{\mathrm{N1}}
+=J_k^{\mathrm{common}}
++\sum_{t=0}^{T-1}\ell_{\mathrm{clip},k,t}
+}.
+\]
+
+추가 clipping 손실 비용은 running callback에만 들어가며, 별도의 terminal
+clipping 비용은 없다. 구현에서는 단계별 비용을 그대로 합산하고 $\Delta t$를
+곱하지 않는다. 공통 비용의 주요 항은 다음과 같다.
+
+| 항목 | 최종 연구의 평가 대상·설정 |
+|---|---|
+| Running / terminal EE 위치 추종 | 가중치 1,200,000 / 3,600,000; orientation 항 없음 |
+| 입력 크기 | $0.0005\sum_t\|v_{k,t}\|^2$; 보상 후 요청 입력이 아닌 명목 입력 |
+| 관절 속도 | $5\sum_t\|\dot q_{k,t+1}\|^2$ |
+| 첫 입력 경계 smoothness | $0.25\|v_{k,0}-v_{\mathrm{prev}}\|^2$ |
+| Horizon 내부 smoothness | $\frac{0.25}{T-1}\sum_{t=0}^{T-2}\|v_{k,t+1}-v_{k,t}\|^2$ |
+| 관절 위치·속도 제약 비용 | 각각 50,000; full-span 기준 고정 마진 2.5% |
+| Link / self / floor 충돌 기하 비용 | weight 50,000, clearance 0.005 m |
+| N1 예상 clipping 손실 | $\sum_t\ell_{\mathrm{clip},k,t}$; N0에서는 추가하지 않음 |
+
+Effort와 smoothness 항은 N0/N1 모두 **clamp하지 않은 명목 $v$ 좌표**에 유지한다.
+따라서 두 방법의 차이는 추가 clipping 손실 비용이다. 실제 인가 토크의 변화율이나
+DOB 보상량의 변화율을 이 smoothness 항이 직접 벌하는 것은 아니다.
+
+위 고정 상태 마진과 충돌 기하 비용은 2.4절의 legacy 90% onset 및 2.8절의
+EE-only obstacle barrier와 구분해야 한다. 현재 기본 경로는 link/self 충돌 비용도 포함하므로
+7절의 legacy 미포함 항 목록 역시 현재 경로에 그대로 적용되지 않는다.
+
+### 9.4 최종 sampling과 weighting
+
+최종 연구는 sample마다 하나의 6차원 Gaussian perturbation을 뽑아 horizon에 반복한다.
+
+\[
+\epsilon_k\sim\mathcal N(0,\Sigma),\qquad
+\epsilon_{k,t}=\epsilon_k,\qquad
+v_{k,t}=\bar v_t+\epsilon_k.
+\]
+
+\[
+\Sigma=\operatorname{diag}(9,9,9,0.3136,0.3136,0.3136)\ \mathrm{Nm}^2,
+\quad
+\sigma=(3,3,3,0.56,0.56,0.56)\ \mathrm{Nm}.
+\]
+
+이는 $\sigma_j=0.02\tau_j^{\max}$ 에 대응한다. Noise는 sample간·관절간에는
+독립이지만 horizon내에서는 공유한다. 1절의 horizon별 독립 sampling과 다르다.
+
+최종 연구의 sample weight는 **rollout task cost만**으로 계산한다.
+4절의 library importance-sampling control correction은 추가하지 않는다.
+
+\[
+S_k=J_k^{\mathrm{N0}}\ \text{또는}\ J_k^{\mathrm{N1}},\qquad
+\omega_k=
+\frac{\exp[-(S_k-\min_i S_i)/64]}
+{\sum_i\exp[-(S_i-\min_j S_j)/64]}.
+\]
+
+공통 설정은 $K=136$, $T=10$, $\Delta t=0.02$ s, temperature $\lambda=64$,
+FF + residual warm start, mean update $\alpha=1$, DOB Q cutoff 3 Hz,
+가속도 LPF 6 Hz이다. 기본 GUI `final_n0`는 이 N0 구조를 사용하며,
+KROC 비교에서 N1을 선택한 경우에만 위 추가 비용을 활성화한다.
+
+### 9.5 최적화 비용과 결과 지표의 차이
+
+실험 결과의 clipping 누적 손실은
+
+\[
+J_{\mathrm{clip}}^{\mathrm{metric}}
+=\sum_s
+\left\|u_{\mathrm{app},s}-(v_s^*+\hat d_s)\right\|_2\Delta t
+\]
+
+이다. 이는 실제 실행 이력에서 산출하는 **Nm·s 단위 평가 지표**이며,
+rollout중의 초과 토크 제곱을 합산하는 최적화 비용과 다르다.
+또한 clipping 손실 감소가 항상 추종오차 감소로 이어지지는 않는다.
+
+외란·DOB가 없는 경우를 수식상 생각하면 $\hat d_s=0$ 이므로 추가 비용은
+$w_{\mathrm{clip}}\|v-\operatorname{clip}(v)\|^2$ 로 줄어든다.
+급격한 궤적 전환에 대한 DOB OFF 조건의 효과는 이번 최종 연구의 주 조건으로
+검증하지 않았다. 연구용 N1 클래스에는 DOB ON을 요구하는 실행 체크도 있으므로,
+이 수식이 현행 N1을 그대로 DOB OFF 실험에 사용할 수 있다는 뜻은 아니다.
+
+### 9.6 구현·설정·최종 보고서
+
+| 내용 | 파일 |
+|---|---|
+| 추가 비용의 식과 running cost 가산 | `kroc/improve_n1_clipping_cost.py`: `clipping_loss_cost`, `ClippingLossN1._running_cost` |
+| 명목 입력 clamp 해제와 공통 입력 비용 보정 | `kroc/input_headroom_study.py`: `InputHeadroomTracker` |
+| 최종 비교의 고정 설정 | `kroc/validate_n1_final_fixed.py` |
+| GUI 기본 N0 | `controllers/final_n0_controller.py`, `configs/gui_final_n0.yaml` |
+| KROC 비교 실행 경로 | `kroc/view_input_headroom.py` |
+
+최종 결과와 Figure 설명은
+[최종 보고서](../kroc/final_report_20261116/report.md)를 참조한다.

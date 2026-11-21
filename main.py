@@ -95,8 +95,20 @@ def _save_npz(results: dict[str, dict], destination: Path, single: bool) -> None
 
 
 def _mppi_options(cfg: dict[str, Any]) -> dict[str, Any]:
+    from controllers.measured_mppi_controller import MeasuredStateTracker
     controller, cost = cfg["controller"], cfg["cost"]["mppi"]
-    return {
+    noise,observer=cfg['measurement'],cfg['observer']
+    options = {
+        'require_cuda':bool(controller['require_cuda']),
+        'compile_rollout_loop':bool(controller['compile_rollout_loop']),
+        'tracker_class':MeasuredStateTracker,
+        'tracker_options':{'sensor_noise':{
+            'position_std_rad':float(noise['position_std_rad']) if noise['enabled'] else 0.,
+            'velocity_std_rad_s':float(noise['velocity_std_rad_s']) if noise['enabled'] else 0.,
+            'seed':int(noise['seed'])},
+            'physical_limit_penalty_only':cost['limit_onset']=='physical',
+            'dob_acceleration_lpf_cutoff_hz':float(observer['acceleration_lpf_hz']),
+            'dob_cutoff_hz':float(observer['q_cutoff_hz'])},
         "seed": int(controller["seed"]),
         "n_samples": int(controller["samples"]),
         "horizon": int(controller["horizon"]),
@@ -114,6 +126,28 @@ def _mppi_options(cfg: dict[str, Any]) -> dict[str, Any]:
         "joint_velocity_limit_weight": float(cost["joint_velocity_limit"]),
         "joint_limit_soft_ratio": float(cost["joint_limit_soft_ratio"]),
     }
+    if controller['implementation']=='research_baseline':
+        from controllers.research_baseline_controller import ResearchBaselineTracker
+        options['tracker_class']=ResearchBaselineTracker
+        options['tracker_options'].pop('physical_limit_penalty_only')
+        options['tracker_options'].update(
+            fixed_margin_fraction=float(cost['fixed_margin_fraction']),
+            collision_weight=float(cost['collision_weight']),
+            collision_clearance=float(cost['collision_clearance']),
+            fuse_costs=bool(controller['fuse_costs']),
+            asynchronous_solve=bool(controller['asynchronous_solve']),
+            compile_auxiliary=bool(controller['compile_auxiliary']))
+    elif controller['implementation']=='final_n0':
+        from controllers.final_n0_controller import FinalN0Tracker
+        from kroc.run_pre_input_baseline import load_preset
+        options['tracker_class']=FinalN0Tracker
+        options['tracker_options'].pop('physical_limit_penalty_only')
+        margin=dict(load_preset()['state_margin'])
+        margin.update(fixed_fraction=float(cost['fixed_margin_fraction']),min_fraction=float(cost['fixed_margin_fraction']))
+        options['tracker_options'].update(proposal='single',boundary_weight=float(cost['smoothness']),
+            margin_config=margin,collision_weight=float(cost['collision_weight']),
+            collision_clearance=float(cost['collision_clearance']),collision_backend='triton')
+    return options
 
 
 def _ilqr_options(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -142,7 +176,7 @@ def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
     settings = runtime_settings(cfg, command)
     settings["mppi_options"] = _mppi_options(cfg)
     settings["ilqr_options"] = _ilqr_options(cfg)
-    settings["capture_mppi_samples"] = bool(cfg["output"]["show"])
+    settings["capture_mppi_samples"] = bool(cfg["output"]["show"] and cfg['output']['capture_samples'])
     reference = waypoints(settings["trajectory"], settings["n_steps"])
     if command == "compare":
         results, paths, centers = run_comparison(settings, reference)
@@ -194,14 +228,39 @@ def _run_or_compare(command: str, cfg: dict[str, Any], output: Path) -> None:
         print(f"  {LABELS.get(key, key):<12} RMSE={values['rmse_err_mm']:.2f} mm, "
               f"MeanT={values['mean_solve_ms']:.2f} ms")
     if cfg["output"]["show"]:
-        import matplotlib.pyplot as plt
-        from visualization.animator import animate_comparison
-        figure, animation = animate_comparison(
-            results, reference, moving_obstacle_paths=paths,
-            static_obstacle_centers=centers,
-        )
-        globals().update(_LIVE_FIGURE=figure, _LIVE_ANIMATION=animation)
-        plt.show()
+        _show_animation(results,reference,paths,centers)
+
+
+def _show_animation(results,reference,paths=None,centers=None):
+    from visualization.backend import enable_gui_backend
+    enable_gui_backend()
+    import matplotlib.pyplot as plt
+    from visualization.animator import animate_comparison
+    figure,animation=animate_comparison(results,reference,
+        moving_obstacle_paths=paths,static_obstacle_centers=centers)
+    globals().update(_LIVE_FIGURE=figure,_LIVE_ANIMATION=animation)
+    plt.show()
+
+
+def _show_cached_result(command,cfg,directory):
+    """A cache hit skips computation, not a requested arm animation."""
+    from experiment_runner import waypoints
+    from utils.trajectory import chasing_obstacle_paths,static_obstacle_centers
+    settings=runtime_settings(cfg,command)
+    reference=waypoints(settings['trajectory'],settings['n_steps'])
+    with np.load(directory/'results.npz',allow_pickle=False) as saved:
+        if command=='run':
+            key=settings['controller'].upper()+('_DOB' if settings['use_dob'] else '')
+            results={key:{k:saved[k].copy() for k in saved.files}}
+        else:
+            prefixes=sorted({k.split('__',1)[0] for k in saved.files})
+            results={prefix.upper():{k.split('__',1)[1]:saved[k].copy()
+                for k in saved.files if k.startswith(prefix+'__')} for prefix in prefixes}
+    mode=settings['obstacle_mode']
+    paths=chasing_obstacle_paths(reference,cfg['controller']['horizon']+2) if mode=='dynamic' else None
+    centers=static_obstacle_centers(reference,settings['static_obstacle_count']) if mode=='static' else None
+    print('[REPLAY] saved arm trajectory (sampled rollout overlays are not stored)')
+    _show_animation(results,reference,paths,centers)
 
 
 def _benchmark(cfg: dict[str, Any], output: Path) -> None:
@@ -230,6 +289,7 @@ def _benchmark(cfg: dict[str, Any], output: Path) -> None:
         from benchmarks.benchmark_hardware_mppi import run_benchmark
         options = _mppi_options(cfg)
         options.pop("seed", None)
+        options.pop('require_cuda',None)
         run_benchmark(
             seeds=bench["seeds"], trajectory=bench["trajectories"][0],
             output=output / "metrics.json",
@@ -273,6 +333,8 @@ def main() -> None:
         # Keep the GUI/output-consumer contract intact while reusing a result.
         print(f"[OUTPUT] {cached}")
         print("[SKIP] simulation and result saving were skipped")
+        if args.command!='benchmark' and cfg['output']['show']:
+            _show_cached_result(args.command,cfg,cached)
         return
     output = _output_directory(cfg)
     dump_config(cfg, output / "config.yaml")

@@ -69,8 +69,45 @@ def validate_config(cfg: dict[str, Any]) -> None:
     if steps < 3 or not math.isclose(duration, steps * dt, abs_tol=1e-9):
         raise ValueError("experiment.duration must be an integer multiple of simulation.dt")
     controller_names = {"mppi", "sqp", "ilqr"}
+    for name in ['torque_components_plot','export_csv']:
+        if not isinstance(cfg['output'][name],bool):raise ValueError('output.'+name+' must be boolean')
+    if not isinstance(cfg['output']['capture_samples'],bool):
+        raise ValueError('output.capture_samples must be boolean')
+    if cfg['controller']['implementation'] not in {'legacy','research_baseline','final_n0'}:
+        raise ValueError('unknown MPPI implementation')
+    for key in ['fuse_costs','compile_auxiliary','asynchronous_solve']:
+        if not isinstance(cfg['controller'][key],bool):
+            raise ValueError(f'controller.{key} must be boolean')
+    if cfg['controller']['implementation'] in {'research_baseline','final_n0'}:
+        if cfg['controller']['temporal_noise_rho']!=1.:
+            raise ValueError('research_baseline uses single-instance sampling: rho must be 1')
+        if cfg['cost']['mppi']['limit_onset']!='native':
+            raise ValueError('research_baseline uses fixed-margin onset, select native')
+    for key in ['collision_weight','collision_clearance','fixed_margin_fraction']:
+        value=cfg['cost']['mppi'][key]
+        if not isinstance(value,Real) or not math.isfinite(value) or value<0:
+            raise ValueError(f'cost.mppi.{key} must be finite and nonnegative')
+    if cfg['cost']['mppi']['fixed_margin_fraction']>=.5:
+        raise ValueError('fixed margin must be <.5')
     if cfg["controller"]["type"] not in controller_names:
         raise ValueError("controller.type must be mppi, sqp, or ilqr")
+    measurement=cfg['measurement'];observer=cfg['observer']
+    if not isinstance(measurement['enabled'],bool):raise ValueError('measurement.enabled must be boolean')
+    for name in ['position_std_rad','velocity_std_rad_s']:
+        if not isinstance(measurement[name],Real) or not math.isfinite(measurement[name]) or measurement[name]<0:
+            raise ValueError('measurement noise standard deviations must be finite and nonnegative')
+    if not isinstance(measurement['seed'],int) or measurement['seed']<0:raise ValueError('measurement.seed must be nonnegative integer')
+    for name in ['acceleration_lpf_hz','q_cutoff_hz']:
+        value=observer[name]
+        if (not isinstance(value,Real) or not math.isfinite(value) or value<0
+                or (name=='q_cutoff_hz' and value==0)):
+            raise ValueError('observer cutoffs must be finite; acceleration LPF >=0 (0=off), Q cutoff >0')
+    if cfg['cost']['mppi']['limit_onset'] not in ['native','physical']:
+        raise ValueError('cost.mppi.limit_onset must be native or physical')
+    for name in ['require_cuda','compile_rollout_loop']:
+        if not isinstance(cfg['controller'][name],bool):raise ValueError(f'controller.{name} must be boolean')
+    if cfg['controller']['compile_rollout_loop'] and cfg['obstacle']['mode']!='none':
+        raise ValueError('compiled rollout currently supports obstacle.mode=none only')
     if cfg["experiment"]["trajectory"] not in TRAJECTORY_NAMES:
         raise ValueError(f"experiment.trajectory must be one of: {', '.join(sorted(TRAJECTORY_NAMES))}")
     if cfg["controller"]["horizon"] < 1 or cfg["controller"]["samples"] < 1:

@@ -8,13 +8,19 @@ simulation:
   dt: 0.02
 controller:
   type: mppi
+  implementation: final_n0
+  fuse_costs: false
+  compile_auxiliary: false
+  asynchronous_solve: false
   horizon: 10
   samples: 136
-  temperature: 0.24
+  temperature: 64.0
   mean_update_alpha: 1.0
   seed: 7
-  noise_variance: [13.6, 23.8, 13.6, 2.72, 2.72, 0.85]
-  temporal_noise_rho: 0.0
+  noise_variance: [9.0, 9.0, 9.0, 0.3136, 0.3136, 0.3136]
+  temporal_noise_rho: 1.0
+  require_cuda: true
+  compile_rollout_loop: false
   sqp_max_iterations: 5
   ilqr_max_iterations: 2
 cost:
@@ -28,6 +34,10 @@ cost:
     joint_limit_soft_ratio: 0.90
     joint_position_limit: 50000.0
     joint_velocity_limit: 50000.0
+    limit_onset: native
+    fixed_margin_fraction: 0.025
+    collision_weight: 50000.0
+    collision_clearance: 0.005
   ilqr:
     position: 1200000.0
     terminal: 4800000.0
@@ -46,7 +56,16 @@ experiment:
   duration: 10.0
   trajectory: circle
   disturbance: false
-  dob: false
+  dob: true
+measurement:
+  enabled: true
+  position_std_rad: 0.001
+  velocity_std_rad_s: 0.01
+  seed: 98007
+observer:
+  # Measured-state DOB tuning: zero disables the acceleration-only prefilter.
+  acceleration_lpf_hz: 6.0
+  q_cutoff_hz: 3.0
 obstacle:
   mode: none
   count: 4
@@ -83,5 +102,8 @@ benchmark:
 output:
   root: results
   show: true
+  capture_samples: false
   torque_plot: false
+  torque_components_plot: false
+  export_csv: true
   disturbance_error_plot: false

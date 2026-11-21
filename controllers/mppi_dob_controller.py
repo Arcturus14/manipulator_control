@@ -104,16 +104,22 @@ def recover_residual_sequence(optimal: torch.Tensor,
     return optimal - feedforward - shift
 
 
-def shift_control_sequence(optimal: torch.Tensor) -> torch.Tensor:
-    """Receding-horizon warm start with a zero terminal control.
+def shift_control_sequence(optimal: torch.Tensor,
+                           terminal_mode: str = "zero") -> torch.Tensor:
+    """Shift absolute controls, padding with zero (legacy) or the last action.
 
     This is the conventional absolute-control MPPI update used by the
     ``zero_initial_shift`` experiment: the first solve starts from all zeros,
     then each later solve starts from the previous optimum shifted by one
-    stage.  It deliberately does not add inverse-dynamics feedforward.
+    stage. The ``hold`` variant is used by ``feedforward_initial_shift``.
+    Neither shift adds inverse-dynamics feedforward.
     """
+    if terminal_mode not in {"zero", "hold"}:
+        raise ValueError("terminal_mode must be zero or hold")
     shifted = torch.zeros_like(optimal)
     shifted[:-1].copy_(optimal[1:].detach())
+    if terminal_mode == "hold":
+        shifted[-1].copy_(optimal[-1].detach())
     return shifted
 
 
@@ -256,10 +262,21 @@ class UR5Tracker:
         output to a separately compiled FK function before the next rollout,
         so the clone intentionally remains outside the compiled function.
         """
-        applied = action.clamp(self.dynamics.u_min, self.dynamics.u_max)
         return self._compiled_rollout_dynamics(
-            state, applied - self._rollout_disturbance, rollout_step
+            state, self._prediction_torque(action), rollout_step
         ).clone()
+
+    def _prediction_torque(self, action: torch.Tensor) -> torch.Tensor:
+        """Effective rollout torque; experiment adapters may change coordinates."""
+        return action.clamp(self.dynamics.u_min, self.dynamics.u_max) - self._rollout_disturbance
+
+    def _bound_nominal_action(self, action: torch.Tensor) -> torch.Tensor:
+        """Legacy MPPI bounds, independently of the final physical clamp."""
+        return action.clamp(self.dynamics.u_min, self.dynamics.u_max)
+
+    def _apply_actuator_limits(self, requested: torch.Tensor) -> torch.Tensor:
+        """Physical actuator map; diagnostic subclasses may replace this map."""
+        return requested.clamp(self.dynamics.u_min, self.dynamics.u_max)
 
     def _set_rollout_disturbance(self, use_dob: bool) -> None:
         """Snapshot the current estimate for one MPPI prediction solve."""
@@ -318,7 +335,7 @@ class UR5Tracker:
                     if self.device.type == "cuda" else None)
         original_u = self.ctrl.U.clone()
         indices = torch.arange(self.horizon, device=self.device) + self.step
-        if sampling_center_mode == "feedforward_residual":
+        if sampling_center_mode in {"feedforward_residual", "feedforward_initial_shift"}:
             self.ctrl.U.copy_(feedforward[indices])
         else:
             self.ctrl.U.zero_()
@@ -382,10 +399,10 @@ class UR5Tracker:
                 "'rollout_nominal_shift', or 'estimate_only'"
             )
         if sampling_center_mode not in {
-                "feedforward_residual", "zero_initial_shift"}:
+                "feedforward_residual", "zero_initial_shift", "feedforward_initial_shift"}:
             raise ValueError(
                 "sampling_center_mode must be 'feedforward_residual' or "
-                "'zero_initial_shift'"
+                "'zero_initial_shift', or 'feedforward_initial_shift'"
             )
         use_rollout_disturbance = (
             use_dob and dob_compensation_mode in {
@@ -416,8 +433,14 @@ class UR5Tracker:
         feedforward = self._feedforward_torque(state[:6])
         residual_sequence = torch.zeros_like(self.ctrl.U)
         shifted_control_sequence = torch.zeros_like(self.ctrl.U)
+        if sampling_center_mode == "feedforward_initial_shift":
+            # Initialize once; subsequent solves shift absolute optimal torques.
+            shifted_control_sequence.copy_(feedforward[:self.horizon])
 
         print("[MPPI] rollout/cost kernels warming up outside control loop...")
+        # Reset once per episode. A fixed proposal does not need an identical
+        # covariance validation/copy (and CUDA host sync) every control step.
+        self.ctrl.set_diagonal_noise_variance(self._base_noise_variance)
         warmup_start = time.perf_counter()
         self._warm_up_controller(state, feedforward, sampling_center_mode)
         print(f"[MPPI] kernels ready: {time.perf_counter() - warmup_start:.2f} s")
@@ -483,7 +506,7 @@ class UR5Tracker:
                     + self.disturbance_covariance_gain
                     * self._rollout_disturbance.square()
                 )
-            self.ctrl.set_diagonal_noise_variance(active_variance)
+                self.ctrl.set_diagonal_noise_variance(active_variance)
             if sampling_center_mode == "feedforward_residual":
                 warm_start = compose_nominal_sequence(
                     nominal_sequence, residual_sequence,
@@ -492,17 +515,13 @@ class UR5Tracker:
             else:
                 warm_start = shifted_control_sequence
             sampling_center = warm_start.detach().clone()
-            self.ctrl.U[:] = warm_start.clamp(
-                self.dynamics.u_min, self.dynamics.u_max
-            )
+            self.ctrl.U[:] = self._bound_nominal_action(warm_start)
             if self.device.type == "cuda":
                 torch.compiler.cudagraph_mark_step_begin()
                 torch.cuda.synchronize(self.device)
             solve_start = time.perf_counter()
             self._prepare_solve(measured_state, sampling_center)
-            mppi_action = self._mppi_command(measured_state).clamp(
-                self.dynamics.u_min, self.dynamics.u_max
-            )
+            mppi_action = self._bound_nominal_action(self._mppi_command(measured_state))
             if self.device.type == "cuda":
                 torch.cuda.synchronize(self.device)
             self.solve_time_history.append(time.perf_counter() - solve_start)
@@ -534,7 +553,8 @@ class UR5Tracker:
                     residual_sequence[-1].zero_()
             else:
                 shifted_control_sequence.copy_(
-                    shift_control_sequence(self.ctrl.U)
+                    shift_control_sequence(self.ctrl.U, terminal_mode=(
+                        "hold" if sampling_center_mode == "feedforward_initial_shift" else "zero"))
                 )
             if capture_samples and self.ctrl.states is not None:
                 q_all = self.ctrl.states[0, :, :, :6]
@@ -562,15 +582,10 @@ class UR5Tracker:
                 else torch.zeros_like(mppi_action)
             )
             commanded = mppi_action + compensation
-            applied = commanded.clamp(
-                self.dynamics.u_min, self.dynamics.u_max
-            )
+            applied = self._apply_actuator_limits(commanded)
             previous_state = state.clone()
             effective = applied - true_disturbance
-            predicted_effective = mppi_action - (
-                self._rollout_disturbance
-                if use_rollout_disturbance else torch.zeros_like(mppi_action)
-            )
+            predicted_effective = self._prediction_torque(mppi_action)
             estimate_used = self.dob.d_hat.detach().clone()
             self.estimate_used_history.append(estimate_used.cpu().numpy().copy())
             # Diagnostic only, outside the timed MPPI solve. Use the same
@@ -598,52 +613,36 @@ class UR5Tracker:
             self._sync_cost_step()
             q = state[:6]
             ee = fk_batch(q.unsqueeze(0))[0]
-            error_mm = torch.linalg.vector_norm(ee - self.waypoints[self.step]).item() * 1e3
-            q_history.append(q.cpu().numpy())
-            velocity_history.append(state[6:].cpu().numpy())
-            self.joint_position_violation_history.append(
-                bool(torch.any((q < q_min) | (q > q_max)).item())
-            )
-            self.joint_velocity_violation_history.append(
-                bool(torch.any(state[6:].abs() > self.tracking_cost.dq_max).item())
-            )
-            ee_history.append(ee.cpu().numpy())
-            control_history.append(applied.cpu().numpy())
+            # One host transfer for the unchanged per-step diagnostic fields,
+            # instead of synchronizing after each small .cpu()/.item() call.
+            vector_fields = (q, state[6:], applied, nominal_sequence[0],
+                sampling_center[0], current_residual, mppi_action,
+                predicted_effective, effective, true_disturbance-estimate_used,
+                self.dob.d_hat, true_disturbance, self.dob.residual,
+                self.dob.tau_model, self.dob.raw_acceleration,
+                self.dob.filtered_acceleration)
+            scalars = torch.stack((
+                torch.linalg.vector_norm(ee-self.waypoints[self.step]),
+                torch.any((q<q_min)|(q>q_max)),
+                torch.any(state[6:].abs()>self.tracking_cost.dq_max),
+                torch.any(torch.isclose(applied.abs(),self.dynamics.u_max,rtol=0.,atol=1e-5))))
+            packed = torch.cat((*vector_fields,ee,scalars)).detach().cpu().numpy()
+            vectors = packed[:96].reshape(16,6)
+            error_mm = float(packed[99])*1e3
+            q_history.append(vectors[0]);velocity_history.append(vectors[1])
+            self.joint_position_violation_history.append(bool(packed[100]))
+            self.joint_velocity_violation_history.append(bool(packed[101]))
+            ee_history.append(packed[96:99]);control_history.append(vectors[2])
             error_history.append(error_mm)
-            self.feedforward_history.append(
-                nominal_sequence[0].detach().cpu().numpy().copy()
-            )
-            self.sampling_center_history.append(
-                sampling_center[0].cpu().numpy().copy()
-            )
-            self.optimized_residual_history.append(
-                current_residual.cpu().numpy().copy()
-            )
-            self.mppi_command_history.append(
-                mppi_action.detach().cpu().numpy().copy()
-            )
-            self.predicted_effective_torque_history.append(
-                predicted_effective.detach().cpu().numpy().copy()
-            )
-            self.actual_effective_torque_history.append(
-                effective.detach().cpu().numpy().copy()
-            )
-            self.disturbance_error_history.append(
-                (true_disturbance - estimate_used).cpu().numpy().copy()
-            )
-            self.saturation_history.append(bool(torch.any(torch.isclose(
-                applied.abs(), self.dynamics.u_max, rtol=0.0, atol=1e-5
-            )).item()))
-            estimate_history.append(self.dob.d_hat.cpu().numpy().copy())
-            disturbance_history.append(true_disturbance.cpu().numpy().copy())
-            self.dob_residual_history.append(self.dob.residual.cpu().numpy().copy())
-            self.dob_model_torque_history.append(self.dob.tau_model.cpu().numpy().copy())
-            self.dob_raw_acceleration_history.append(
-                self.dob.raw_acceleration.cpu().numpy().copy()
-            )
-            self.dob_filtered_acceleration_history.append(
-                self.dob.filtered_acceleration.cpu().numpy().copy()
-            )
+            histories = (self.feedforward_history,self.sampling_center_history,
+                self.optimized_residual_history,self.mppi_command_history,
+                self.predicted_effective_torque_history,self.actual_effective_torque_history,
+                self.disturbance_error_history,estimate_history,disturbance_history,
+                self.dob_residual_history,self.dob_model_torque_history,
+                self.dob_raw_acceleration_history,self.dob_filtered_acceleration_history)
+            for history, value in zip(histories,vectors[3:]):
+                history.append(value)
+            self.saturation_history.append(bool(packed[102]))
             self.control_cycle_time_history.append(time.perf_counter() - cycle_start)
             if (simulation_step + 1) % 50 == 0:
                 print(f"  step {simulation_step + 1:>3}/{self.episode_steps}  "

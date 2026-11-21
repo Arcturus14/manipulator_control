@@ -30,6 +30,7 @@ BENCHMARKS = ("baseline", "static", "dynamic", "hardware", "mean_update")
 OUTPUT_PATTERN = re.compile(r"^\[OUTPUT\]\s+(.+)$")
 # Edit this constant to change the mean-update value exposed by the GUI.
 GUI_MEAN_UPDATE_ALPHA = 0.9
+GUI_DEFAULT_CONFIG = ROOT / 'configs' / 'gui_final_n0.yaml'
 
 
 def _csv(values: list[Any]) -> str:
@@ -70,7 +71,7 @@ class SimulationGUI:
         self.root.geometry("1180x960")
         self.root.minsize(980, 820)
 
-        self.config = load_config(None, {})
+        self.config = load_config(GUI_DEFAULT_CONFIG, {})
         self.variables: dict[str, tk.Variable] = {}
         self.parsers: dict[str, Callable[[str], Any]] = {}
         self.widgets: dict[str, ttk.Widget] = {}
@@ -81,6 +82,11 @@ class SimulationGUI:
         self.output_directory: Path | None = None
 
         self.command_var = tk.StringVar(value="run")
+        self.headroom_mode_var = tk.StringVar(value="replay")
+        self.headroom_seed_var = tk.StringVar(value="6807")
+        self.headroom_case_var = tk.StringVar(value="N0 vs N1")
+        self.headroom_scenario_var = tk.StringVar(value="boundary133")
+        self.headroom_filter_var = tk.StringVar(value="q3_a6")
         self.mean_update_enabled_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Ready")
         self.preset_var = tk.StringVar()
@@ -126,7 +132,8 @@ class SimulationGUI:
 
         mode = ttk.LabelFrame(outer, text="Run mode", padding=8, style="Section.TLabelframe")
         mode.pack(fill="x", pady=(0, 8))
-        for text, value in (("Single run", "run"), ("Comparison", "compare"), ("Benchmark", "benchmark")):
+        for text, value in (("Single run", "run"), ("Comparison", "compare"), ("Benchmark", "benchmark"),
+                            ("KROC: final N0 vs N1", "input_headroom")):
             ttk.Radiobutton(
                 mode, text=text, value=value, variable=self.command_var,
                 command=self._refresh_state,
@@ -241,6 +248,55 @@ class SimulationGUI:
             foreground="#666666",
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
+        from kroc.view_input_headroom import CASES, SCENARIOS, SEEDS, FILTERS
+        self.headroom_scenario_var.set(SCENARIOS[self.headroom_scenario_var.get()])
+        self.headroom_filter_var.set(FILTERS[self.headroom_filter_var.get()])
+        self.headroom_frame = self._section(tab, "KROC final report: N0 vs N1 (2026-11-16)", 0, 2, colspan=2)
+        for row, label, name, values in (
+                (0, "Execution", "mode", ("replay", "rerun")),
+                (1, "Controller", "case", CASES),
+                (2, "Scenario", "scenario", tuple(SCENARIOS.values())),
+                (3, "Common DOB filter", "filter", tuple(FILTERS.values())),
+                (4, "Validation seed", "seed", tuple(str(seed) for seed in SEEDS))):
+            ttk.Label(self.headroom_frame, text=label).grid(row=row, column=0, sticky="w")
+            combo = ttk.Combobox(self.headroom_frame, textvariable=getattr(self, f"headroom_{name}_var"),
+                                 values=values, state="readonly", width=39)
+            combo.grid(row=row, column=1, sticky="w", padx=8)
+            setattr(self, f"headroom_{name}_combo", combo)
+        self.headroom_scenario_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh_headroom_seeds())
+        self.headroom_filter_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh_headroom_seeds())
+        ttk.Label(self.headroom_frame, wraplength=840, foreground="#666666", text=(
+            "replay: view validated trajectories. rerun: recompute selected case(s) on CUDA, then animate.\n"
+            "N1: compensation-inclusive clipping-loss cost w=1; N0: cost OFF. Same sampler and common DOB filter.\n"
+            "J3 -133 / -132.5 Nm / nominal; 4 cm circle / 6 s; fixed state margin 2.5%; K=136, H=10; lambda=64.\n"
+            "Noise std [3,3,3,0.56,0.56,0.56] Nm; nominal rollout; nominal input unclamped; final actuator clamp ON.\n"
+            "Default: Q 3 Hz + acceleration LPF 6 Hz. LPF OFF is also available with its own validated seeds.\n"
+            "Controller settings are locked to the report; Output tab controls plots, CSV, recording and display."
+        )).grid(row=5, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+    def _headroom_scenario(self) -> str:
+        from kroc.view_input_headroom import SCENARIOS
+        value = self.headroom_scenario_var.get()
+        return {label: key for key, label in SCENARIOS.items()}.get(value, value)
+
+    def _headroom_filter(self) -> str:
+        from kroc.view_input_headroom import FILTERS
+        value = self.headroom_filter_var.get()
+        return next((key for key, label in FILTERS.items() if value in (key, label)), value)
+
+    def _refresh_headroom_seeds(self) -> None:
+        from kroc.view_input_headroom import available_seeds
+        seeds = tuple(str(seed) for seed in available_seeds(self._headroom_scenario(), self._headroom_filter()))
+        self.headroom_seed_combo.configure(values=seeds)
+        if self.headroom_seed_var.get() not in seeds:
+            self.headroom_seed_var.set(seeds[0])
+
+    def _headroom_command(self) -> list[str]:
+        from kroc.view_input_headroom import gui_command
+        return gui_command(sys.executable, self.headroom_mode_var.get(), int(self.headroom_seed_var.get()),
+                           self.headroom_case_var.get(), self._headroom_scenario(), self._headroom_filter(),
+                           {key:self.variables["output."+key].get() for key in ("root","show","torque_plot","torque_components_plot","disturbance_error_plot","export_csv","capture_samples") if "output."+key in getattr(self,"variables",{})})
+
     def _build_controller_tab(self) -> None:
         tab = self.controller_tab
         tab.columnconfigure((0, 1), weight=1)
@@ -255,10 +311,19 @@ class SimulationGUI:
         ).grid(row=3, column=0, columnspan=2, sticky="w", pady=3)
         self._entry(mppi, 4, "Noise variance J1..J6", "controller.noise_variance", str, 34)
         self._entry(mppi, 5, "Temporal noise rho", "controller.temporal_noise_rho")
+        self._check(mppi,6,"Require CUDA","controller.require_cuda")
+        self._check(mppi,7,"Compile full rollout (no obstacle mode)","controller.compile_rollout_loop")
+        self._combo(mppi,8,"Implementation","controller.implementation",("final_n0","research_baseline","legacy"))
+        self._check(mppi,9,"Fuse stage costs (startup compile)","controller.fuse_costs")
+        ttk.Label(mppi,text="final_n0: final N0 structure; nominal input unclamped, physical actuator clamp. research_baseline: historical.").grid(row=10,column=0,columnspan=2,sticky='w')
+        self._check(mppi,11,"Compile simulation/DOB dynamics","controller.compile_auxiliary")
+        self._check(mppi,12,"Async mass-matrix solve","controller.asynchronous_solve")
 
         local = self._section(tab, "Local optimizer", 1, 0)
         self._entry(local, 0, "iLQR max iterations", "controller.ilqr_max_iterations", int)
         self._entry(local, 1, "SQP max iterations", "controller.sqp_max_iterations", int)
+        self._entry(local,2,"DOB acceleration LPF [Hz]","observer.acceleration_lpf_hz")
+        self._entry(local,3,"DOB Q cutoff [Hz]","observer.q_cutoff_hz")
 
         note = self._section(tab, "Robot model", 0, 1, colspan=2)
         ttk.Label(
@@ -267,6 +332,11 @@ class SimulationGUI:
                   "from the loaded YAML and are not edited in the GUI."),
             foreground="#666666", wraplength=800,
         ).grid(row=0, column=0, sticky="w")
+        measurement=self._section(tab,"MPPI measured-state noise (true plant state stays separate)",0,2,colspan=2)
+        self._check(measurement,0,"Enable sensor noise","measurement.enabled")
+        self._entry(measurement,1,"Position std [rad]","measurement.position_std_rad")
+        self._entry(measurement,2,"Velocity std [rad/s]","measurement.velocity_std_rad_s")
+        self._entry(measurement,3,"Sensor noise seed","measurement.seed",int)
 
     def _build_cost_tab(self) -> None:
         tab = self.cost_tab
@@ -284,7 +354,11 @@ class SimulationGUI:
             if controller == "mppi":
                 self._entry(frame, len(labels), "Joint position limit", "cost.mppi.joint_position_limit")
                 self._entry(frame, len(labels) + 1, "Joint velocity limit", "cost.mppi.joint_velocity_limit")
-                self._entry(frame, len(labels) + 2, "Limit soft ratio", "cost.mppi.joint_limit_soft_ratio")
+                self._entry(frame, len(labels) + 2, "Native ratio / baseline normalization", "cost.mppi.joint_limit_soft_ratio")
+                self._combo(frame,len(labels)+3,"Penalty onset","cost.mppi.limit_onset",("native","physical"))
+                self._entry(frame,len(labels)+4,"Fixed margin (full span)","cost.mppi.fixed_margin_fraction")
+                self._entry(frame,len(labels)+5,"Self-collision weight","cost.mppi.collision_weight")
+                self._entry(frame,len(labels)+6,"Self-collision clearance [m]","cost.mppi.collision_clearance")
 
     def _build_obstacle_tab(self) -> None:
         tab = self.obstacle_tab
@@ -337,7 +411,10 @@ class SimulationGUI:
         output = self._section(tab, "Output options", 0, 0)
         self._entry(output, 0, "Output root", "output.root", str, 50)
         self._check(output, 1, "Show animation after completion", "output.show")
-        self._check(output, 2, "Generate joint torque plot", "output.torque_plot")
+        self._check(output, 2, "Generate joint torque plot (J1-J6)", "output.torque_plot")
+        self._check(output, 5, "KROC: plot MPPI / compensation / requested / applied torques", "output.torque_components_plot")
+        self._check(output, 6, "KROC: export joint state and torque time series CSV", "output.export_csv")
+        self._check(output,4,"Record sampled rollouts for animation (extra overhead)","output.capture_samples")
         self._check(
             output, 3, r"Plot disturbance estimation error |d - d_hat|",
             "output.disturbance_error_plot",
@@ -474,12 +551,21 @@ class SimulationGUI:
 
     def _reset_defaults(self) -> None:
         self.preset_var.set("")
-        self._load_into_form(load_config(DEFAULT_CONFIG, {}))
+        self._load_into_form(load_config(GUI_DEFAULT_CONFIG, {}))
         self.command_var.set("run")
         self.status_var.set("Defaults restored")
         self._refresh_state()
 
     def _preview(self) -> None:
+        if self.command_var.get() == "input_headroom":
+            try:
+                command = self._headroom_command()
+            except ValueError as error:
+                messagebox.showerror("Final input-headroom configuration", str(error), parent=self.root)
+                return
+            messagebox.showinfo("Final input-headroom configuration", " ".join(command) +
+                                "\n\nLocked controller settings; Output options are applied.", parent=self.root)
+            return
         try:
             cfg = self._config_from_form()
         except ValueError as error:
@@ -521,6 +607,20 @@ class SimulationGUI:
         except tk.TclError:
             pass
 
+        research = self.command_var.get() == "input_headroom"
+        for path, widget in self.widgets.items():
+            if research:
+                widget.configure(state="normal" if path.startswith("output.") else "disabled")
+            elif not path.startswith(("comparison.", "obstacle.static.", "obstacle.dynamic.")):
+                widget.configure(state="readonly" if isinstance(widget, ttk.Combobox) else "normal")
+        for name in ("mode", "seed", "case", "scenario", "filter"):
+            getattr(self, f"headroom_{name}_combo").configure(state="readonly" if research else "disabled")
+        self._refresh_headroom_seeds()
+        for tab in (self.controller_tab, self.cost_tab, self.obstacle_tab):
+            self.notebook.tab(tab, state="disabled" if research else "normal")
+        if research:
+            self.notebook.select(self.experiment_tab)
+
     def _append_log(self, text: str) -> None:
         self.log.configure(state="normal")
         self.log.insert("end", text)
@@ -529,6 +629,14 @@ class SimulationGUI:
 
     def _start(self) -> None:
         if self.process is not None:
+            return
+        if self.command_var.get() == "input_headroom":
+            try:
+                command = self._headroom_command()
+            except ValueError as error:
+                messagebox.showerror("Final input-headroom configuration", str(error), parent=self.root)
+                return
+            self._launch(command)
             return
         try:
             cfg = self._config_from_form()
@@ -549,6 +657,10 @@ class SimulationGUI:
             sys.executable, "-u", str(ROOT / "main.py"),
             self.command_var.get(), "--config", str(self.temp_config),
         ]
+        self.config = copy.deepcopy(cfg)
+        self._launch(command)
+
+    def _launch(self, command: list[str]) -> None:
         self._append_log("\n$ " + " ".join(command) + "\n")
         try:
             self.process = subprocess.Popen(
@@ -562,7 +674,6 @@ class SimulationGUI:
             messagebox.showerror("Launch failed", str(error), parent=self.root)
             return
 
-        self.config = copy.deepcopy(cfg)
         self.output_directory = None
         for item in self.metrics.get_children():
             self.metrics.delete(item)

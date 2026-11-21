@@ -126,7 +126,9 @@ def run_benchmark(*, seeds: list[int], trajectory: str, alphas: list[float],
                   smooth_weight: float,
                   joint_position_limit_weight: float,
                   joint_velocity_limit_weight: float,
-                  joint_limit_soft_ratio: float) -> None:
+                  joint_limit_soft_ratio: float, require_cuda: bool = False,
+                  tracker_class=None,tracker_options=None,
+                  compile_rollout_loop: bool = False) -> None:
     if len(alphas) != 2 or any(not 0 < alpha <= 1 for alpha in alphas):
         raise ValueError("alphas must contain two values in (0, 1]")
     if not seeds:
@@ -157,6 +159,9 @@ def run_benchmark(*, seeds: list[int], trajectory: str, alphas: list[float],
                     joint_position_limit_weight=joint_position_limit_weight,
                     joint_velocity_limit_weight=joint_velocity_limit_weight,
                     joint_limit_soft_ratio=joint_limit_soft_ratio,
+                    require_cuda=require_cuda,tracker_options=tracker_options,
+                    compile_rollout_loop=compile_rollout_loop,
+                    **({'tracker_class':tracker_class} if tracker_class is not None else {}),
                 )
                 row = {
                     "seed": seed,

@@ -124,7 +124,8 @@ def run_benchmark(*, seeds: list[int], trajectory: str, output: Path,
                   joint_position_limit_weight: float,
                   joint_velocity_limit_weight: float,
                   joint_limit_soft_ratio: float,
-                  require_cuda: bool = True) -> None:
+                  require_cuda: bool = True, tracker_class=None,
+                  tracker_options=None, compile_rollout_loop: bool = False) -> None:
     environment = environment_metadata()
     if require_cuda and not environment["cuda_available"]:
         raise RuntimeError(
@@ -152,6 +153,9 @@ def run_benchmark(*, seeds: list[int], trajectory: str, output: Path,
             joint_position_limit_weight=joint_position_limit_weight,
             joint_velocity_limit_weight=joint_velocity_limit_weight,
             joint_limit_soft_ratio=joint_limit_soft_ratio,
+            require_cuda=require_cuda,tracker_options=tracker_options,
+            compile_rollout_loop=compile_rollout_loop,
+            **({'tracker_class':tracker_class} if tracker_class is not None else {}),
         )
         solve_ms = np.asarray(data["solve_t"], dtype=float) * 1e3
         solve_ms = solve_ms[np.isfinite(solve_ms)]
