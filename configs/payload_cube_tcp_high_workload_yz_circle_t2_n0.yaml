@@ -1,0 +1,45 @@
+# Opt-in slower high-workload circle candidate. Existing payload/controller presets stay unchanged.
+schema_version: 1
+payload:
+  mass_kg: 5.0
+  side_m: 0.06299605249474366
+  center_in_flange_m:
+  - 0.0
+  - 0.0
+  - 0.03149802624737183
+scene:
+  initial_q:
+  - 3.3856502882768393
+  - -0.7567933336980511
+  - 0.6251575519624236
+  - -1.1785527348654727
+  - -1.7568404349090032
+  - 5.592034923389832
+  duration_s: 16.0
+  period_s: 2.0
+  circle_radius_m: 0.2
+  use_dob: false
+  disturbance_joint: 2
+  disturbance_amplitude_nm: 0.0
+  trajectory: circle_yz
+  reference_start_ramp_s: 3.0
+controller:
+  case: N0
+  samples: 136
+  horizon: 10
+  temperature: 64.0
+  noise_variance:
+  - 9.0
+  - 9.0
+  - 9.0
+  - 0.3136
+  - 0.3136
+  - 0.3136
+  q_cutoff_hz: 3.0
+  acceleration_lpf_hz: 6.0
+  payload_collision: true
+  experimental_stabilization:
+    posture_weight: 5000.0
+    boundary_weight: 4.0
+    smooth_weight: 4.0
+output_root: kroc/results/payload_high_workload_circle_t2_20261122/replay
