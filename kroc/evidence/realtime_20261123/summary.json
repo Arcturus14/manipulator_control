@@ -1,0 +1,330 @@
+{
+ "unit": "ms from scheduled release",
+ "definition": "Control-computation latency at a 50 Hz release, with every step saved. CUDA only.\n\n python -m kroc.benchmark_realtime                # about 40 min\n python -m kroc.benchmark_realtime --summarize    # rebuild the table from the saved steps\n\nAll times are measured from the scheduled release of the step:\n\n wake         the loop resumes after waiting (release/wake-up lateness)\n command      MPPI, d_hat compensation and clamp done, torque copied to the CPU\n update_done  DOB update done as well; simulated plant and prediction are subtracted\n loop_ready   whole simulation loop done (plant and diagnostics included)\n release_slip how far the release was postponed because the loop was still busy\n\nThe measurement used by a solve is simulated at the end of the previous step, so\nthis is computation latency after waiting. It is not sensor-to-actuator latency.\nThe CPU-to-GPU state upload is included; robot communication is not.\n",
+ "table": [
+  {
+   "backend": "kernel",
+   "wait": "sleep",
+   "case": "N0",
+   "steps": 8000,
+   "seeds": 10,
+   "release_slip_steps": 1,
+   "wake": {
+    "mean": 0.1382942375,
+    "p99": 0.17640200000000006,
+    "p999": 0.21220240000000268,
+    "max": 0.2531,
+    "over_20ms": 0
+   },
+   "command": {
+    "mean": 2.9500711125000003,
+    "p99": 3.426244000000001,
+    "p999": 4.420605800000007,
+    "max": 5.8185,
+    "over_20ms": 0
+   },
+   "update_done": {
+    "mean": 3.5736501,
+    "p99": 4.355203,
+    "p999": 5.793925200000028,
+    "max": 6.4249,
+    "over_20ms": 0
+   },
+   "loop_ready": {
+    "mean": 8.863842227784732,
+    "p99": 10.166183999999998,
+    "p999": 11.09363870000003,
+    "max": 23.9574,
+    "over_20ms": 1
+   }
+  },
+  {
+   "backend": "kernel",
+   "wait": "sleep",
+   "case": "N1",
+   "steps": 8000,
+   "seeds": 10,
+   "release_slip_steps": 1,
+   "wake": {
+    "mean": 0.1336187375,
+    "p99": 0.1715,
+    "p999": 0.19340180000000198,
+    "max": 0.6987,
+    "over_20ms": 0
+   },
+   "command": {
+    "mean": 3.0435448,
+    "p99": 3.5549400000000007,
+    "p999": 4.244324800000139,
+    "max": 5.6137,
+    "over_20ms": 0
+   },
+   "update_done": {
+    "mean": 3.6714368750000004,
+    "p99": 4.4084350000000025,
+    "p999": 5.702439900000044,
+    "max": 6.549,
+    "over_20ms": 0
+   },
+   "loop_ready": {
+    "mean": 8.911174630788484,
+    "p99": 10.218086999999999,
+    "p999": 11.137757500000308,
+    "max": 23.8476,
+    "over_20ms": 1
+   }
+  },
+  {
+   "backend": "kernel",
+   "wait": "sleep",
+   "case": "D0",
+   "steps": 8000,
+   "seeds": 10,
+   "release_slip_steps": 0,
+   "wake": {
+    "mean": 0.1389166,
+    "p99": 0.18290100000000004,
+    "p999": 0.20141080000001202,
+    "max": 0.5496,
+    "over_20ms": 0
+   },
+   "command": {
+    "mean": 3.4558940000000002,
+    "p99": 4.040421,
+    "p999": 4.747482500000092,
+    "max": 6.7608,
+    "over_20ms": 0
+   },
+   "update_done": {
+    "mean": 4.04617105,
+    "p99": 4.858846000000001,
+    "p999": 6.0263005000000005,
+    "max": 7.8929,
+    "over_20ms": 0
+   },
+   "loop_ready": {
+    "mean": 9.073989361702127,
+    "p99": 10.630297,
+    "p999": 11.937683600000677,
+    "max": 19.3532,
+    "over_20ms": 0
+   }
+  },
+  {
+   "backend": "kernel",
+   "wait": "busy",
+   "case": "N0",
+   "steps": 8000,
+   "seeds": 10,
+   "release_slip_steps": 1,
+   "wake": {
+    "mean": 0.00010640000000000002,
+    "p99": 0.0002,
+    "p999": 0.0016002000000002227,
+    "max": 0.0032,
+    "over_20ms": 0
+   },
+   "command": {
+    "mean": 0.8371616374999999,
+    "p99": 0.9990080000000002,
+    "p999": 1.1368077000000085,
+    "max": 5.7534,
+    "over_20ms": 0
+   },
+   "update_done": {
+    "mean": 0.9730285875,
+    "p99": 1.2603090000000001,
+    "p999": 1.6833142000000159,
+    "max": 5.9686,
+    "over_20ms": 0
+   },
+   "loop_ready": {
+    "mean": 3.8930798873591987,
+    "p99": 4.310332,
+    "p999": 4.7388034000000125,
+    "max": 25.0877,
+    "over_20ms": 1
+   }
+  },
+  {
+   "backend": "kernel",
+   "wait": "busy",
+   "case": "N1",
+   "steps": 8000,
+   "seeds": 10,
+   "release_slip_steps": 1,
+   "wake": {
+    "mean": 0.00010852500000000004,
+    "p99": 0.0002,
+    "p999": 0.0020001000000001113,
+    "max": 0.0067,
+    "over_20ms": 0
+   },
+   "command": {
+    "mean": 0.8387128625,
+    "p99": 0.9981080000000002,
+    "p999": 1.1166041000000047,
+    "max": 5.9277,
+    "over_20ms": 0
+   },
+   "update_done": {
+    "mean": 0.9760422000000001,
+    "p99": 1.2451370000000008,
+    "p999": 1.6938286000000318,
+    "max": 6.142,
+    "over_20ms": 0
+   },
+   "loop_ready": {
+    "mean": 3.9093365707133914,
+    "p99": 4.303128999999998,
+    "p999": 4.755390400000035,
+    "max": 24.6757,
+    "over_20ms": 1
+   }
+  },
+  {
+   "backend": "kernel",
+   "wait": "busy",
+   "case": "D0",
+   "steps": 8000,
+   "seeds": 10,
+   "release_slip_steps": 0,
+   "wake": {
+    "mean": 0.00011126250000000001,
+    "p99": 0.0002,
+    "p999": 0.0022001000000001114,
+    "max": 0.0126,
+    "over_20ms": 0
+   },
+   "command": {
+    "mean": 0.9203688750000001,
+    "p99": 1.0815009999999998,
+    "p999": 1.2541110000000122,
+    "max": 1.5774,
+    "over_20ms": 0
+   },
+   "update_done": {
+    "mean": 1.0620795,
+    "p99": 1.3546,
+    "p999": 1.7345035000000038,
+    "max": 2.1652,
+    "over_20ms": 0
+   },
+   "loop_ready": {
+    "mean": 3.9972855319148937,
+    "p99": 4.381116999999999,
+    "p999": 4.783847300000006,
+    "max": 19.4802,
+    "over_20ms": 0
+   }
+  },
+  {
+   "backend": "captured",
+   "wait": "sleep",
+   "case": "N0",
+   "steps": 8000,
+   "seeds": 10,
+   "release_slip_steps": 7990,
+   "wake": {
+    "mean": 0.00158165,
+    "p99": 0.0024,
+    "p999": 0.005700200000000223,
+    "max": 0.0278,
+    "over_20ms": 0
+   },
+   "command": {
+    "mean": 19.563991537499998,
+    "p99": 19.7346,
+    "p999": 20.97235600000173,
+    "max": 29.2298,
+    "over_20ms": 17
+   },
+   "update_done": {
+    "mean": 20.4999703875,
+    "p99": 21.030987,
+    "p999": 23.38071670000347,
+    "max": 311.2547,
+    "over_20ms": 7998
+   },
+   "loop_ready": {
+    "mean": 23.062973817271587,
+    "p99": 23.690428999999998,
+    "p999": 25.919636100004773,
+    "max": 314.1515,
+    "over_20ms": 7990
+   }
+  },
+  {
+   "backend": "captured",
+   "wait": "sleep",
+   "case": "N1",
+   "steps": 8000,
+   "seeds": 10,
+   "release_slip_steps": 7990,
+   "wake": {
+    "mean": 0.0015756375000000001,
+    "p99": 0.0026,
+    "p999": 0.024702000000002226,
+    "max": 0.0308,
+    "over_20ms": 0
+   },
+   "command": {
+    "mean": 19.624461750000002,
+    "p99": 19.826603,
+    "p999": 22.29481080000001,
+    "max": 28.8308,
+    "over_20ms": 23
+   },
+   "update_done": {
+    "mean": 20.540159037499997,
+    "p99": 21.124211,
+    "p999": 23.21001590000013,
+    "max": 279.4903,
+    "over_20ms": 8000
+   },
+   "loop_ready": {
+    "mean": 23.075375844806008,
+    "p99": 23.726271999999998,
+    "p999": 25.917930000000172,
+    "max": 282.3742,
+    "over_20ms": 7990
+   }
+  },
+  {
+   "backend": "captured",
+   "wait": "sleep",
+   "case": "D0",
+   "steps": 8000,
+   "seeds": 10,
+   "release_slip_steps": 7990,
+   "wake": {
+    "mean": 0.0019467374999999998,
+    "p99": 0.0029,
+    "p999": 0.0057,
+    "max": 0.0151,
+    "over_20ms": 0
+   },
+   "command": {
+    "mean": 19.718595325,
+    "p99": 19.891904,
+    "p999": 20.58493320000059,
+    "max": 25.7818,
+    "over_20ms": 28
+   },
+   "update_done": {
+    "mean": 20.6461071875,
+    "p99": 21.133347,
+    "p999": 22.65247360000387,
+    "max": 293.6406,
+    "over_20ms": 8000
+   },
+   "loop_ready": {
+    "mean": 23.191294217772214,
+    "p99": 23.757454,
+    "p999": 26.791791300002675,
+    "max": 296.5469,
+    "over_20ms": 7990
+   }
+  }
+ ]
+}

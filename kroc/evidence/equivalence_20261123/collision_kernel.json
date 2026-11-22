@@ -1,0 +1,35 @@
+{
+ "configurations": 680000,
+ "threshold_cost": 1.0,
+ "missed_penalties": 0,
+ "false_penalties": 0,
+ "near_threshold_cases": 334951,
+ "max_relative_error_kernel": 2.0831613816035984e-05,
+ "max_relative_error_captured_float32": 5.318218130378227e-05,
+ "collision_kernel_median_ms": {
+  "nominal": 0.3694829938467592,
+  "every_branch": 1.0770545050036162
+ },
+ "provenance": {
+  "git_parent_commit": "645c4472abc6f64981d79a44660a94d3161fe259",
+  "gpu": "NVIDIA GeForce GTX 1650, 580.178.04, 90.00 W",
+  "cpu": "13th Gen Intel(R) Core(TM) i7-13700K",
+  "cpu_governor": "powersave",
+  "os": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+  "python": "3.10.20",
+  "torch": "2.13.0+cu130",
+  "triton": "3.7.1",
+  "pytorch_mppi": "0.9.1",
+  "source_sha256": {
+   "controllers/rollout_kernels.py": "8185f474344e71804fa72643a19c16e9f7a196040ad1a50b7c6a47b9e29400da",
+   "controllers/payload_kernel_mppi.py": "a19b7e13a78f9f25575d5119bfa60c5dc3150b968094735f90714753b22bc92a",
+   "controllers/payload_stabilized_mppi.py": "2642a6d9e8b426c0d63dd4b7961b249f70fc31a8d96b1a2385b62ba25480aa2b",
+   "controllers/payload_mppi.py": "3a556cbb0287ea85bc56adea27bbc1024ef183c28128844716041b415159087d",
+   "dynamics/scalar_codegen.py": "ac364b5eddb6a2e439c0dbb8f92823df1261d63e2eb4ed2ff43da96846efd87b",
+   "kroc/run_payload_cube_tcp.py": "db11b5e4214b3decff3c7755e298de263c11b05e1ebc9b2027d6adeb453734f5",
+   "kroc/evidence_common.py": "f25f99c9352c483a350dc40a77ac78915fab8ea1665affbe0e9a643a4da17b26",
+   "configs/payload_circle_T2_J2_45_n0.yaml": "06f403061b937287c4733c338c856a7c6071b74411d71cc23c38930371828119",
+   "kroc/check_collision_kernel.py": "c1bdc023075cadec5335a1193a4eef54e93f05b5754ec64900d055a9a08cb308"
+  }
+ }
+}

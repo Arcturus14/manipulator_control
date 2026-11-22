@@ -1,0 +1,183 @@
+{
+ "family_size": 21,
+ "test": "two-sided Wilcoxon signed-rank, Holm",
+ "comparisons": [
+  {
+   "comparison": "original DOB on - off",
+   "mean_difference_mm": 1.1786302677315414,
+   "ci95_half_width_mm": 0.015192647822281451,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned DOB on - off",
+   "mean_difference_mm": 1.0969537816007038,
+   "ci95_half_width_mm": 0.03356046653677352,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "DOB off original - aligned",
+   "mean_difference_mm": 6.385388653171178,
+   "ci95_half_width_mm": 0.032027785586644764,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "original_45 N0 - no disturbance",
+   "mean_difference_mm": 2.6578689522987715,
+   "ci95_half_width_mm": 0.3301713462723342,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "original_45 N0 - N1",
+   "mean_difference_mm": 1.4325787533027925,
+   "ci95_half_width_mm": 0.20979336584337863,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "original_45 N0 - D0",
+   "mean_difference_mm": 1.7361729775992578,
+   "ci95_half_width_mm": 0.25889786203608894,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "original_45 N1 - D0",
+   "mean_difference_mm": 0.3035942242964655,
+   "ci95_half_width_mm": 0.05701579780215544,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_45 N0 - no disturbance",
+   "mean_difference_mm": 3.4695050754415013,
+   "ci95_half_width_mm": 0.42647083753113946,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_45 N0 - N1",
+   "mean_difference_mm": 1.931813951770274,
+   "ci95_half_width_mm": 0.25984746417016225,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_45 N0 - D0",
+   "mean_difference_mm": 2.385516427420614,
+   "ci95_half_width_mm": 0.32283336310794897,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_45 N1 - D0",
+   "mean_difference_mm": 0.45370247565033994,
+   "ci95_half_width_mm": 0.07296356433575799,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_47p5 N0 - no disturbance",
+   "mean_difference_mm": 6.368752575718128,
+   "ci95_half_width_mm": 0.425005166147075,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_47p5 N0 - N1",
+   "mean_difference_mm": 3.254001123760054,
+   "ci95_half_width_mm": 0.248612371663862,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_47p5 N0 - D0",
+   "mean_difference_mm": 4.404202359843718,
+   "ci95_half_width_mm": 0.3204042182718572,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_47p5 N1 - D0",
+   "mean_difference_mm": 1.1502012360836633,
+   "ci95_half_width_mm": 0.10110724050563814,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_45 max N0 - N1",
+   "mean_difference_mm": 7.387720979750156,
+   "ci95_half_width_mm": 1.017854248215681,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_45 max N0 - D0",
+   "mean_difference_mm": 9.634732455015182,
+   "ci95_half_width_mm": 1.245796645091644,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_45 max N1 - D0",
+   "mean_difference_mm": 2.247011475265026,
+   "ci95_half_width_mm": 0.34382465455815336,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_47p5 max N0 - N1",
+   "mean_difference_mm": 10.60862559825182,
+   "ci95_half_width_mm": 1.2072342244336962,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_47p5 max N0 - D0",
+   "mean_difference_mm": 15.189037565141916,
+   "ci95_half_width_mm": 1.466137258612066,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  },
+  {
+   "comparison": "aligned_47p5 max N1 - D0",
+   "mean_difference_mm": 4.580411966890097,
+   "ci95_half_width_mm": 0.573871268819241,
+   "positive_seeds": 10,
+   "wilcoxon_p": 0.001953125,
+   "holm_p": 0.041015625
+  }
+ ],
+ "backend_max_abs_difference": {
+  "eval_rmse_mm": 0.0003270367529175644,
+  "eval_max_mm": 0.0017900019884109497,
+  "q3_min_rad": 9.059906005859375e-06
+ },
+ "valid": {
+  "captured": "168/168",
+  "kernel": "168/168"
+ }
+}

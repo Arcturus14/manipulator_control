@@ -1,0 +1,66 @@
+{
+ "applies_to": [
+  "realtime_20261123",
+  "controls_20261123/causes.json"
+ ],
+ "note": "These were measured while an opt-in DOB filter-alignment patch was in the working tree; the patch was deferred and reverted before committing, so their recorded hashes of rollout_kernels.py, payload_kernel_mppi.py and run_payload_cube_tcp.py (and of analyze_controls.py, which lost that suite) differ from the committed files. The option was off in these runs and the generated default kernels were byte-identical. The runs below were replayed on the committed code.",
+ "replays": [
+  {
+   "variant": "unchanged",
+   "case": "N0",
+   "amplitude_abs_nm": 45.0,
+   "seed": 7207,
+   "max_abs_difference": 0.0
+  },
+  {
+   "variant": "unchanged",
+   "case": "N1",
+   "amplitude_abs_nm": 47.5,
+   "seed": 7247,
+   "max_abs_difference": 0.0
+  },
+  {
+   "variant": "unchanged",
+   "case": "D0",
+   "amplitude_abs_nm": 47.5,
+   "seed": 7297,
+   "max_abs_difference": 0.0
+  },
+  {
+   "variant": "previous_projected",
+   "case": "N0",
+   "amplitude_abs_nm": 45.0,
+   "seed": 7217,
+   "max_abs_difference": 0.0
+  },
+  {
+   "variant": "lpf_off",
+   "case": "N0",
+   "amplitude_abs_nm": 0.0,
+   "seed": 7227,
+   "max_abs_difference": 0.0
+  }
+ ],
+ "provenance": {
+  "git_parent_commit": "645c4472abc6f64981d79a44660a94d3161fe259",
+  "gpu": "NVIDIA GeForce GTX 1650, 580.178.04, 90.00 W",
+  "cpu": "13th Gen Intel(R) Core(TM) i7-13700K",
+  "cpu_governor": "powersave",
+  "os": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+  "python": "3.10.20",
+  "torch": "2.13.0+cu130",
+  "triton": "3.7.1",
+  "pytorch_mppi": "0.9.1",
+  "source_sha256": {
+   "controllers/rollout_kernels.py": "8185f474344e71804fa72643a19c16e9f7a196040ad1a50b7c6a47b9e29400da",
+   "controllers/payload_kernel_mppi.py": "a19b7e13a78f9f25575d5119bfa60c5dc3150b968094735f90714753b22bc92a",
+   "controllers/payload_stabilized_mppi.py": "2642a6d9e8b426c0d63dd4b7961b249f70fc31a8d96b1a2385b62ba25480aa2b",
+   "controllers/payload_mppi.py": "3a556cbb0287ea85bc56adea27bbc1024ef183c28128844716041b415159087d",
+   "dynamics/scalar_codegen.py": "ac364b5eddb6a2e439c0dbb8f92823df1261d63e2eb4ed2ff43da96846efd87b",
+   "kroc/run_payload_cube_tcp.py": "db11b5e4214b3decff3c7755e298de263c11b05e1ebc9b2027d6adeb453734f5",
+   "kroc/evidence_common.py": "f25f99c9352c483a350dc40a77ac78915fab8ea1665affbe0e9a643a4da17b26",
+   "configs/payload_circle_T2_J2_45_n0.yaml": "06f403061b937287c4733c338c856a7c6071b74411d71cc23c38930371828119",
+   "kroc/analyze_controls.py": "b0fe41ab47fa544afa91bbcbe238e373db3c698eb741aead11d1f21715505f18"
+  }
+ }
+}

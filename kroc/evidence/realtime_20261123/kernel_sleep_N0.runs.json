@@ -1,0 +1,66 @@
+{
+ "runs": [
+  {
+   "seed": 7207,
+   "eval_rmse_mm": 7.097364539151504
+  },
+  {
+   "seed": 7217,
+   "eval_rmse_mm": 4.998063225231006
+  },
+  {
+   "seed": 7227,
+   "eval_rmse_mm": 6.047566502358497
+  },
+  {
+   "seed": 7237,
+   "eval_rmse_mm": 5.445807256517953
+  },
+  {
+   "seed": 7247,
+   "eval_rmse_mm": 6.550079759890009
+  },
+  {
+   "seed": 7257,
+   "eval_rmse_mm": 5.313904146347739
+  },
+  {
+   "seed": 7267,
+   "eval_rmse_mm": 5.610737569192201
+  },
+  {
+   "seed": 7277,
+   "eval_rmse_mm": 5.822387309481185
+  },
+  {
+   "seed": 7287,
+   "eval_rmse_mm": 5.940222534690188
+  },
+  {
+   "seed": 7297,
+   "eval_rmse_mm": 6.249784137389329
+  }
+ ],
+ "provenance": {
+  "git_parent_commit": "645c4472abc6f64981d79a44660a94d3161fe259",
+  "gpu": "NVIDIA GeForce GTX 1650, 580.178.04, 90.00 W",
+  "cpu": "13th Gen Intel(R) Core(TM) i7-13700K",
+  "cpu_governor": "powersave",
+  "os": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+  "python": "3.10.20",
+  "torch": "2.13.0+cu130",
+  "triton": "3.7.1",
+  "pytorch_mppi": "0.9.1",
+  "source_sha256": {
+   "controllers/rollout_kernels.py": "27969ee16c4c33536d55f61936c0729c99d4ee7fa21792c5b36dd8e674a64b0c",
+   "controllers/payload_kernel_mppi.py": "0d15f54b6c4122e0b3a07edd1e367cb738520c3860e625b18d297bef142ed6db",
+   "controllers/payload_stabilized_mppi.py": "2642a6d9e8b426c0d63dd4b7961b249f70fc31a8d96b1a2385b62ba25480aa2b",
+   "controllers/payload_mppi.py": "3a556cbb0287ea85bc56adea27bbc1024ef183c28128844716041b415159087d",
+   "dynamics/scalar_codegen.py": "ac364b5eddb6a2e439c0dbb8f92823df1261d63e2eb4ed2ff43da96846efd87b",
+   "kroc/run_payload_cube_tcp.py": "8e28fa60cf4ffb9ea15b6def9f073c8776e9b0bfd2f27885b5a33f46443fd5a1",
+   "kroc/evidence_common.py": "f25f99c9352c483a350dc40a77ac78915fab8ea1665affbe0e9a643a4da17b26",
+   "configs/payload_circle_T2_J2_45_n0.yaml": "06f403061b937287c4733c338c856a7c6071b74411d71cc23c38930371828119",
+   "kroc/benchmark_realtime.py": "9d178703b61158334c797c48b22713bc1c0ee019cbbc753004d24b8ec6b2b624"
+  }
+ }
+}
