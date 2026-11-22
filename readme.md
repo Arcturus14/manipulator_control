@@ -30,6 +30,8 @@ M(q)qdd + C(q, qd)qd + g(q) + Bqd = tau
 ```
 
 - **MPPI**: `pytorch_mppi`를 이용해 토크 시퀀스를 샘플링하고, 말단 위치 추종·속도·입력·입력 변화·관절 위치/속도 제한 접근·장애물 비용을 최소화합니다. 상태는 clamp하지 않고 원래 동역학으로 적분하며, 토크에는 actuator saturation을 유지합니다. Rollout 동역학은 `torch.compile`로 컴파일되며 CUDA가 있으면 자동으로 GPU를 사용합니다.
+  Running cost는 전진된 상태 x(t+1)를 같은 시각의 기준 ref(t+1) 및 장애물 위치와
+  비교합니다. 2026-11-22 이전 결과는 `align_running_reference=False`로 재현됩니다.
 - **iLQR**: UR5 비선형 동역학을 반복 선형화하고 Gauss-Newton 비용 근사와 line search로 토크 시퀀스를 갱신합니다. MPPI와 동일한 비용 항을 사용하되 가중치는 `cost.ilqr`에서 독립적으로 관리합니다. 예측에는 컴파일된 semi-implicit 적분을, 실제 플랜트에는 공통 RK4 적분을 사용하며 CPU `float64`로 실행합니다.
 - **SQP**: CasADi로 비선형 OCP를 구성하고 acados의 Full-SQP 및 HPIPM QP solver로 풉니다. SQP 플랜트 계산은 CPU `float64`를 사용합니다.
 - **DOB**: 측정 가속도와 nominal inverse dynamics로 외란 토크를 추정하고 제어 입력에 보상값을 더합니다.

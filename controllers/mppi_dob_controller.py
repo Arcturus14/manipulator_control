@@ -149,6 +149,7 @@ class UR5Tracker:
                  compile_rollout_loop: bool = False,
                  dob_acceleration_lpf_cutoff_hz: float = 0.0,
                  dob_alpha: float = DOB_ALPHA,
+                 align_running_reference: bool = True,
                  dob_cutoff_hz: float | None = None):
         self.device, self.dtype = device, dtype
         self.step = 0
@@ -201,6 +202,12 @@ class UR5Tracker:
         )
         if obstacle_cost is not None and obstacle_cost.horizon != self.horizon:
             raise ValueError("ObstacleCost horizon must match the obstacle MPPI horizon")
+        if not isinstance(align_running_reference, bool):
+            raise ValueError("align_running_reference must be true or false")
+        self.align_running_reference = align_running_reference
+        for cost in (self.tracking_cost, obstacle_cost):
+            if cost is not None:
+                cost.reference_offset = int(align_running_reference)
 
         self.dob = TorchDisturbanceObserver(
             self.dynamics, DT, alpha=dob_alpha,

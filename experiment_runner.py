@@ -325,6 +325,9 @@ def run_mppi(reference: np.ndarray, has_disturbance: bool = True,
         ),
         "mppi_joint_limit_soft_ratio": np.asarray(joint_limit_soft_ratio),
         "mppi_compile_rollout_loop": np.asarray(compile_rollout_loop),
+        "mppi_align_running_reference": np.asarray(
+            tracker.align_running_reference
+        ),
         "initial_q": q0.detach().cpu().numpy(),
         "initial_qd": qd0.detach().cpu().numpy(),
         "static_exp_weight": np.asarray(static_exp_weight),

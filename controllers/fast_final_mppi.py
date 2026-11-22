@@ -88,7 +88,8 @@ class FastFinalTracker(PositionInputTracker):
                 loss = requested-requested.clamp(self.dynamics.u_min, self.dynamics.u_max)
                 value = value+self.clipping_weight*loss.square().sum(-1)
             return value
-        return self._fast_stage(state, action, self.waypoints[self.step+rollout_step],
+        index = self.tracking_cost.state_index(rollout_step)
+        return self._fast_stage(state, action, self.waypoints[self.step+index],
             self.tracking_cost.previous_action, self._compensation_snapshot, rollout_step == 0)
 
     def _terminal_cost(self, states, actions):

@@ -63,9 +63,10 @@ class TrackingCost(BaseCost):
     def running(self, state: torch.Tensor, action: torch.Tensor, step: int) -> torch.Tensor:
         torque = action.clamp(self.u_min, self.u_max)
         ee = fk_batch(state[:, :6])
-        reference = (self.reference_window[step]
+        index = self.state_index(step)
+        reference = (self.reference_window[index]
                      if self.reference_window is not None
-                     else self.waypoints[self.episode_step + step])
+                     else self.waypoints[self.episode_step + index])
         cost = self.position_weight * (ee - reference).square().sum(dim=1)
         cost += W_ACT * torque.square().sum(dim=1)
         cost += W_VEL * state[:, 6:].square().sum(dim=1)

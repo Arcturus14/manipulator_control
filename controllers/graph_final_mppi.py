@@ -19,7 +19,8 @@ class GraphFinalTracker(FastFinalTracker):
             self.ctrl._compute_rollout_costs_single, fullgraph=True, options=options)
 
     def _running_cost(self, state, action, rollout_step):
-        return self._fast_stage(state, action, self.tracking_cost.reference_window[rollout_step],
+        index = self.tracking_cost.state_index(rollout_step)
+        return self._fast_stage(state, action, self.tracking_cost.reference_window[index],
             self.tracking_cost.previous_action, self._compensation_snapshot, rollout_step == 0)
 
     def _terminal_cost(self, states, actions):

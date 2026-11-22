@@ -81,7 +81,7 @@ class ObstacleCost(BaseCost):
         ).sum(dim=1)
 
     def running(self, state: torch.Tensor, action: torch.Tensor, step: int) -> torch.Tensor:
-        return self.evaluate_positions(fk_batch(state[:, :6]), step)
+        return self.evaluate_positions(fk_batch(state[:, :6]), self.state_index(step))
 
     def terminal(self, states: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:
         last_q = states[..., -1, :6].reshape(-1, 6)

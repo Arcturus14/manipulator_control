@@ -254,9 +254,17 @@ J2를 사용한 이유는 payload 중력과 궤적 관성 부하가 이 관절�
 `align_running_reference`는 위치·자세 running cost의 기준만 ref(t+1)로 옮긴다.
 terminal cost와 첫 입력의 boundary cost는 바꾸지 않는다.
 
-옵션 기본값은 false이고 payload 안정화 tracker에만 있다. 1–5절 결과와 다른 MPPI
-경로는 정렬 전 비용을 그대로 쓰므로, MPPI와 iLQR 등 다른 제어기의 추종 오차를
-비교할 때는 이 차이를 먼저 확인해야 한다.
+이 정렬은 이후 모든 MPPI 경로(기본 tracker, research/final N0, fast/captured/graph,
+payload, 동적 장애물 비용)의 기본값이 되었다. iLQR과 SQP는 원래 x(t)와 ref(t)를
+비교하므로 변경하지 않았다.
+
+1–5절과 2026-11-22 이전의 모든 MPPI 결과는 정렬 전 비용으로 만든 것이다. 재현하려면
+`tracker_options`(payload 설정은 `experimental_stabilization`)에
+`align_running_reference: false`를 명시하거나 커밋 `ad30c72`를 사용한다. 옵션 키가
+없는 기존 `resolved_config.json`도 이제 정렬된 비용으로 실행되므로 주의한다.
+
+5절 조건(−133 Nm, 느린 4 cm 원)을 3 seed로 다시 확인한 결과 RMSE 변화는 1% 미만이고
+N0 > N1 > D0 순서는 유지되었다. 전체 sweep은 다시 실행하지 않았다.
 
 기준 궤적 끝은 정지값으로 padding되어 마지막 약 0.3 s에 21–28 mm의 인공 오차가
 생긴다. 따라서 평가에서 제외한다.

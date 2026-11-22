@@ -125,8 +125,9 @@ class ResearchBaselineTracker(MeasuredStateTracker):
                 cost += self.collision_cost(state)
             return cost
         c = self.tracking_cost
-        reference = (c.reference_window[rollout_step] if c.reference_window is not None
-                     else self.waypoints[self.step+rollout_step])
+        index = c.state_index(rollout_step)
+        reference = (c.reference_window[index] if c.reference_window is not None
+                     else self.waypoints[self.step+index])
         cost = self._stage(state,action,reference,rollout_step==0)
         if self.obstacle_cost is not None:
             cost += self.obstacle_cost.running(state,action,rollout_step)
