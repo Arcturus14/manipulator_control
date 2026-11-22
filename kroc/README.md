@@ -312,16 +312,55 @@ clamp만 제거하면 무외란 값으로 돌아가므로 이 조건의 성능 �
 - 검증한 외란 범위는 45–47.5 Nm이다. 단일 seed 탐색에서 40 Nm는 세 방식의 차이가
   없었고, 50 Nm는 N0의 팔꿈치가 뒤집혔다(q3 < 0).
 - N1/D0가 자세 안정성을 높인다고 주장하지 않는다. 최소 q3는 N0보다 작아질 수 있다.
-- MPPI solve 평균은 약 19.4 ms이다. 전체 제어주기의 실시간성은 검증하지 않았다.
+- 실시간성은 10.7절의 kernel backend와 측정 범위에 한해 주장한다.
 - 45/47.5 Nm는 사전 탐색으로 고른 조건이며 다른 궤적·관절로 일반화하지 않는다.
 
 ### 10.6 데이터와 재현
 
 ```bash
-/home/arclab-04/miniconda3/envs/manipulator/bin/python -m kroc.validate_aligned_circle                    # 저장된 168회를 재집계
-/home/arclab-04/miniconda3/envs/manipulator/bin/python -m kroc.validate_aligned_circle --output NEW_DIR   # GPU로 전부 재실행, 약 70분
+/home/arclab-04/miniconda3/envs/manipulator/bin/python -m kroc.validate_aligned_circle                    # 저장된 168회(captured)를 재집계
+/home/arclab-04/miniconda3/envs/manipulator/bin/python -m kroc.validate_aligned_circle --output NEW_DIR   # kernel backend로 재실행, 약 20분 (--backend captured: 약 70분)
 ./execute.sh gui                                          # Preset: payload_circle_T2_J2_45_n0.yaml
 ```
 
 `kroc/results/aligned_circle_20261122/`에 168회 시계열, `summary.json`,
 `provenance.json`이 있다. 이 디렉터리는 Git ignore 대상이므로 별도로 백업한다.
+
+### 10.7 실시간 성능 (kernel backend)
+
+`controller.rollout_backend: kernel`은 N0/N1/D0의 수식, K=136, H=10, 비용과 가중치를
+바꾸지 않고 계산 방식만 바꾼 payload 전용 backend다. preset에는 켜져 있고, 키가 없는
+설정은 기존 `captured` backend를 쓴다.
+
+- RNEA 7회의 6×6 행렬 연산을 스칼라 식으로 펼치고 LDLᵀ로 푼다.
+- 동역학, FK, 추종 비용을 K×H 전체에 대해 GPU kernel 하나로 계산한다.
+- 충돌은 link 좌표계에서 계산하고, 비용이 정확히 0인 쌍만 bounding box로 건너뛴다.
+- 종단 충돌 비용은 같은 x(H)의 마지막 stage 값을 재사용한다.
+- DOB도 kernel로 계산하고, 제어에 쓰이지 않는 고정 margin 진단은 episode 뒤로 옮겼다.
+
+측정 환경: GTX 1650, i7-13700K, powersave governor, 45 Nm 조건.
+지연은 센서 측정부터 MPPI, 보상·clamp, DOB 갱신까지이며 plant 모사는 제외했다.
+
+| 측정 | 방식 | step 수 | 평균 [ms] | p99 [ms] | 최악 [ms] | 20 ms 초과 |
+|---|---|---:|---:|---:|---:|---:|
+| captured, 50 Hz sleep 대기 | N0 | 1,600 | 20.34 | 20.70 | 30.27 | 1,599 |
+| kernel, 50 Hz sleep 대기 | N0 | 8,000 | 3.31 | 4.10 | 6.53 | 0 |
+| kernel, 50 Hz sleep 대기 | N1 | 8,000 | 3.30 | 4.13 | 6.08 | 0 |
+| kernel, 50 Hz sleep 대기 | D0 | 8,000 | 3.76 | 4.62 | 7.12 | 0 |
+| kernel, 50 Hz busy 대기 | N0 | 2,400 | 0.94 | 1.13 | 5.70 | 0 |
+| kernel, 50 Hz busy 대기 | N1 | 2,400 | 0.94 | 1.13 | 1.79 | 0 |
+| kernel, 50 Hz busy 대기 | D0 | 2,400 | 1.01 | 1.25 | 1.91 | 0 |
+
+연속 실행 시 MPPI solve만은 19.10 ms에서 0.45 ms로 줄었다. 충돌 kernel은 모든 분기를
+강제로 계산해도 1.08 ms(통상 0.28 ms)다.
+
+동일성 검증:
+
+- 동역학 식은 float64에서 1e-15 이내로 일치한다.
+- 충돌 비용은 680,000개 자세에서 누락·오검출이 없었다(1 초과 비용 기준).
+- 168회 재실행의 실행별 RMSE 차이는 최대 0.0004 mm이고 10.3–10.4절 값은 모두 같다
+  (`kroc/results/aligned_circle_kernel_20261122/`).
+
+주장 범위는 이 PC의 시뮬레이션에서 20 ms 주기 안에 제어 계산이 끝난다는 것이다.
+Linux는 실시간 OS가 아니므로 hard real-time 보장이 아니며, 로봇 통신 지연도 포함하지
+않는다. 비-payload MPPI 경로와 장애물 조건에는 이 backend가 적용되지 않는다.

@@ -71,6 +71,12 @@ def run_payload(config,seed=6807,case=None,steps=None,output=None,capture_sample
         if 'smooth_weight' in stabilization:opts['smooth_weight']=stabilization['smooth_weight']
         if stabilization.get('diagnostic_sensor_noise_off',False):
             opts['tracker_options']['sensor_noise'].update(position_std_rad=0.,velocity_std_rad_s=0.)
+    backend=settings.get('rollout_backend','captured')
+    if backend not in {'captured','kernel'}:raise ValueError('rollout_backend must be captured or kernel')
+    if backend=='kernel':
+        if stabilization is None:raise ValueError('The kernel backend requires experimental_stabilization')
+        from controllers.payload_kernel_mppi import PayloadKernelTracker,PayloadKernelD0Tracker
+        opts['tracker_class']=PayloadKernelD0Tracker if case=='D0' else PayloadKernelTracker
     opts.update(use_dob=bool(scene['use_dob']),n_samples=int(settings['samples']),
         horizon=int(settings['horizon']),temperature=float(settings['temperature']),
         noise_variance=settings['noise_variance'])

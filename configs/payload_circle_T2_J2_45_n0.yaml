@@ -31,6 +31,7 @@ controller:
   case: N0
   samples: 136
   horizon: 10
+  rollout_backend: kernel
   temperature: 64.0
   noise_variance:
   - 9.0

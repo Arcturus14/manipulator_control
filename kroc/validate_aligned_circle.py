@@ -138,14 +138,16 @@ def main():
     p.add_argument('--output',type=Path,default=OUTPUT)
     p.add_argument('--seeds',type=int,nargs='+',default=SEEDS)
     p.add_argument('--workers',type=int,default=12)
+    p.add_argument('--backend',choices=('captured','kernel'),help='Override controller.rollout_backend of the config')
     p.add_argument('--group',help=argparse.SUPPRESS)
     a=p.parse_args();base=yaml.safe_load(a.config.read_text());planned=list(jobs(a.seeds))
+    if a.backend:base['controller']['rollout_backend']=a.backend
     if a.group:
         run_group(base,a.output,[j for j in planned if group(j)==a.group]);return
     missing=[j for j in planned if not (folder(a.output,j)/'trajectory.npz').exists()]
     for name in dict.fromkeys(group(j) for j in missing):
         subprocess.run([sys.executable,'-m','kroc.validate_aligned_circle','--config',str(a.config),
-            '--output',str(a.output),'--group',name,'--seeds',*map(str,a.seeds)],check=True)
+            '--output',str(a.output),'--group',name,*(['--backend',a.backend] if a.backend else []),'--seeds',*map(str,a.seeds)],check=True)
     summarize(base,a.output,planned,a.workers)
 
 
