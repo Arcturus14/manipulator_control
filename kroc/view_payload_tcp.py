@@ -35,10 +35,27 @@ def torque_metrics(result):
         J_clip_l2_nm_s=float(np.linalg.norm(loss,axis=1).sum()*.02))
 
 
-def save_outputs(results,destination,torque=True,components=True,disturbance_error=True,csv=True):
+def evaluation_metrics(result,window):
+    """Metrics on (start_s,end_s]; excludes the stop-padded end of the reference."""
+    start,end=float(window['start_s']),float(window['end_s'])
+    error=result['err_mm']
+    if not 0<=start<end<=len(error)*.02+1e-9:
+        return dict(eval_skipped=f'Window {start:g}-{end:g}s is outside this run')
+    t=(np.arange(len(error))+1)*.02;mask=(t>start+1e-9)&(t<=end+1e-9)
+    values=dict(eval_start_s=start,eval_end_s=end,
+        eval_rmse_mm=float(np.sqrt(np.mean(error[mask]**2))),eval_max_mm=float(error[mask].max()))
+    if 'min_q3_rad' in window:
+        lowest=float(result['q'][:,2].min())
+        values.update(q3_min_rad=lowest,elbow_ok=lowest>float(window['min_q3_rad']))
+    return values
+
+
+def save_outputs(results,destination,torque=True,components=True,disturbance_error=True,csv=True,evaluation=None):
     import matplotlib.pyplot as plt
     destination=Path(destination);destination.mkdir(parents=True,exist_ok=True)
     metrics={key:torque_metrics(r) for key,r in results.items()}
+    if evaluation:
+        for key,r in results.items():metrics[key].update(evaluation_metrics(r,evaluation))
     (destination/'metrics.json').write_text(json.dumps(metrics,indent=2,allow_nan=False))
     for name,result in results.items():
         time=np.arange(len(result['u_requested']))*.02
@@ -82,13 +99,14 @@ def main():
     cases=CASES if args.case=='N0 vs N1 vs D0' else [args.case]
     stamp=datetime.now().strftime('%Y%m%d_%H%M%S_%f')
     destination=args.output_root/f'{stamp}_payload_seed{args.seed}';destination.mkdir(parents=True)
-    results={}
+    results={};evaluation=cfg.get('evaluation')
     if args.replay:
         for case in cases:
             directory=args.replay/case if (args.replay/case/'trajectory.npz').exists() else args.replay
             resolved=json.loads((directory/'resolved_config.json').read_text())
             if resolved['case']!=case:raise ValueError(f'Replay case mismatch: requested {case}, saved {resolved["case"]}')
             results[case]=load_result(directory)
+            evaluation=resolved.get('evaluation')
         (destination/'replay_source.json').write_text(json.dumps(dict(source=str(args.replay.resolve()),cases=list(cases)),indent=2))
     else:
         from kroc.run_payload_cube_tcp import run_payload
@@ -100,7 +118,7 @@ def main():
     if args.show:
         from visualization.backend import enable_gui_backend
         enable_gui_backend()
-    metrics=save_outputs(results,destination,args.torque,args.components,args.disturbance_error,args.csv)
+    metrics=save_outputs(results,destination,args.torque,args.components,args.disturbance_error,args.csv,evaluation)
     from visualization.animator import animate_comparison
     import matplotlib.pyplot as plt
     reference=next(iter(results.values()))['tcp_reference']

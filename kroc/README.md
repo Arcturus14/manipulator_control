@@ -226,3 +226,94 @@ GPU 실험은 CUDA preflight 성공을 요구하며 CPU fallback 결과를 연�
   N0/N1/D0 원시 자료 및 전체 sweep summary만 남겼다.
 - `kroc/results/`, `*.npz`, `*.png`는 Git ignore 대상이다. 원시 결과 삭제는 Git
   history에 나타나지 않으며 별도 백업이 없으면 복구할 수 없다.
+
+## 10. Payload 고부하 궤적의 입력 포화 비교 (2026-11-22)
+
+외란을 정격의 약 30%로 낮추기 위해 하중과 궤적으로 명목 토크 `u_mppi`를 키운
+조건이다. 5절(J3, 89% 외란)과는 관절, 궤적, 비용의 시점 정렬과 평가 구간이 모두
+다르므로 두 절의 RMSE를 직접 비교하지 않는다.
+
+### 10.1 조건
+
+| 항목 | 값 |
+|---|---|
+| 설정 | `configs/payload_circle_T2_J2_45_n0.yaml` |
+| 하중 / 궤적 | 5 kg / YZ 원, 반경 0.20 m, 주기 2 s, 시작 ramp 3 s, 총 16 s |
+| 외란 | J2 음의 방향, 0.5–2.5 s raised-cosine 증가 후 유지 |
+| 제어기 | 2절 설정 + payload 안정화 비용(posture 5000, boundary/smooth 4) |
+| 시점 정렬 | `align_running_reference: true` |
+| 평가 | 5 < t ≤ 15 s (5주기), seed 7207–7297 (10개) |
+| 유효 실행 | 충돌 및 관절 위치·속도 위반 없음, 전 구간 q3 > 0.2 rad |
+
+J2를 사용한 이유는 payload 중력과 궤적 관성 부하가 이 관절에 집중되기 때문이다.
+
+### 10.2 비용 시점 정렬
+
+`pytorch_mppi`는 stage t의 running cost를 전진된 상태 x(t+1)로 계산한다. 기존
+코드는 이를 ref(t)와 비교해 이 궤적에서 약 14 ms의 추종 지연을 만들었다.
+`align_running_reference`는 위치·자세 running cost의 기준만 ref(t+1)로 옮긴다.
+terminal cost와 첫 입력의 boundary cost는 바꾸지 않는다.
+
+옵션 기본값은 false이고 payload 안정화 tracker에만 있다. 1–5절 결과와 다른 MPPI
+경로는 정렬 전 비용을 그대로 쓰므로, MPPI와 iLQR 등 다른 제어기의 추종 오차를
+비교할 때는 이 차이를 먼저 확인해야 한다.
+
+기준 궤적 끝은 정지값으로 padding되어 마지막 약 0.3 s에 21–28 mm의 인공 오차가
+생긴다. 따라서 평가에서 제외한다.
+
+### 10.3 결과 (평균 ± 표본 표준편차, mm)
+
+무외란 N0:
+
+| 비용 시점 | DOB off | DOB on |
+|---|---:|---:|
+| 정렬 전 | 7.73 ± 0.08 | 8.91 ± 0.09 |
+| 정렬 후 | 1.34 ± 0.07 | 2.44 ± 0.09 |
+
+DOB on의 증가는 무외란에서도 생기는 추정값(J2 1.84 Nm RMS) 때문이며, 주로
+가속도 LPF의 위상지연에서 온다.
+
+외란 인가, DOB on:
+
+| 비용 시점 | 외란 [Nm] | 지표 | N0 | N1 | D0 |
+|---|---:|---|---:|---:|---:|
+| 정렬 후 | 45 | RMSE | 5.91 ± 0.62 | 3.98 ± 0.29 | 3.52 ± 0.20 |
+| 정렬 후 | 45 | 최대 오차 평균 | 17.80 | 10.41 | 8.16 |
+| 정렬 후 | 47.5 | RMSE | 8.81 ± 0.61 | 5.55 ± 0.31 | 4.40 ± 0.19 |
+| 정렬 후 | 47.5 | 최대 오차 평균 | 26.57 | 15.96 | 11.38 |
+| 정렬 전 | 45 | RMSE | 11.56 ± 0.51 | 10.13 ± 0.24 | 9.83 ± 0.17 |
+
+세 행의 RMSE와 정렬 후 최대 오차 모두 10/10 seed에서 N0 > N1 > D0였다
+(Wilcoxon, Holm 보정 p = 0.041).
+
+### 10.4 대조 실험
+
+| 실험 (정렬 후, 45 Nm) | N0 | N1 | D0 | seed 수 |
+|---|---:|---:|---:|---:|
+| actuator clamp 제거 (비물리 진단) | 2.44 | - | - | 10 |
+| sample은 두고 평균 입력열만 투영 | - | - | 4.04 | 10 |
+| 40 s 장시간 (5–39 s 평가) | 6.55 | 4.25 | 3.67 | 3 |
+| 0.1 Hz, ±5% 변동 외란 | 6.18 | 4.06 | 3.47 | 3 |
+
+clamp만 제거하면 무외란 값으로 돌아가므로 이 조건의 성능 저하는 포화 때문이다.
+평균 입력열 투영만으로 D0 개선량의 78%가 나오므로 주된 개선 기전은 실현 불가능한
+명목 입력의 누적(windup) 방지다.
+
+### 10.5 주장 범위
+
+- 검증한 외란 범위는 45–47.5 Nm이다. 단일 seed 탐색에서 40 Nm는 세 방식의 차이가
+  없었고, 50 Nm는 N0의 팔꿈치가 뒤집혔다(q3 < 0).
+- N1/D0가 자세 안정성을 높인다고 주장하지 않는다. 최소 q3는 N0보다 작아질 수 있다.
+- MPPI solve 평균은 약 19.4 ms이다. 전체 제어주기의 실시간성은 검증하지 않았다.
+- 45/47.5 Nm는 사전 탐색으로 고른 조건이며 다른 궤적·관절로 일반화하지 않는다.
+
+### 10.6 데이터와 재현
+
+```bash
+/home/arclab-04/miniconda3/envs/manipulator/bin/python -m kroc.validate_aligned_circle                    # 저장된 168회를 재집계
+/home/arclab-04/miniconda3/envs/manipulator/bin/python -m kroc.validate_aligned_circle --output NEW_DIR   # GPU로 전부 재실행, 약 70분
+./execute.sh gui                                          # Preset: payload_circle_T2_J2_45_n0.yaml
+```
+
+`kroc/results/aligned_circle_20261122/`에 168회 시계열, `summary.json`,
+`provenance.json`이 있다. 이 디렉터리는 Git ignore 대상이므로 별도로 백업한다.

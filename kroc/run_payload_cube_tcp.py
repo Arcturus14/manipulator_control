@@ -63,10 +63,10 @@ def run_payload(config,seed=6807,case=None,steps=None,output=None,capture_sample
     stabilization=settings.get('experimental_stabilization')
     if stabilization is not None:
         from controllers.payload_stabilized_mppi import PayloadStabilizedTracker,PayloadStabilizedD0Tracker
-        allowed={'posture_weight','boundary_weight','smooth_weight','diagnostic_mask_base_upper_arm','diagnostic_sensor_noise_off','reflected_inertia_feedforward'}
+        allowed={'posture_weight','boundary_weight','smooth_weight','diagnostic_mask_base_upper_arm','diagnostic_sensor_noise_off','reflected_inertia_feedforward','align_running_reference'}
         if set(stabilization)-allowed:raise ValueError('Unknown experimental stabilization option')
         opts['tracker_class']=PayloadStabilizedD0Tracker if case=='D0' else PayloadStabilizedTracker
-        for key in ['posture_weight','diagnostic_mask_base_upper_arm','boundary_weight','reflected_inertia_feedforward']:
+        for key in ['posture_weight','diagnostic_mask_base_upper_arm','boundary_weight','reflected_inertia_feedforward','align_running_reference']:
             if key in stabilization:opts['tracker_options'][key]=stabilization[key]
         if 'smooth_weight' in stabilization:opts['smooth_weight']=stabilization['smooth_weight']
         if stabilization.get('diagnostic_sensor_noise_off',False):

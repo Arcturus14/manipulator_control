@@ -813,8 +813,14 @@ class SimulationGUI:
                 def shown(name: str) -> str:
                     value = values.get(name)
                     return "-" if value is None else f"{float(value):.3f}"
+                label, rmse, maximum = case, "rmse_err_mm", "max_err_mm"
+                if "eval_rmse_mm" in values:
+                    label += f" [{values['eval_start_s']:g}-{values['eval_end_s']:g}s]"
+                    rmse, maximum = "eval_rmse_mm", "eval_max_mm"
+                if values.get("elbow_ok") is False:
+                    label += " FLIP"
                 self.metrics.insert("", "end", values=(
-                    case, shown("rmse_err_mm"), shown("max_err_mm"),
+                    label, shown(rmse), shown(maximum),
                     shown("mean_solve_ms"), shown("worst_solve_ms"),
                     shown("dob_rms_nm"),
                 ))

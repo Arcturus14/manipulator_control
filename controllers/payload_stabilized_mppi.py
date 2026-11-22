@@ -22,7 +22,9 @@ class DiagnosticPairMask:
 
 
 class PayloadStabilizedTracker(PayloadFinalTracker):
-    def __init__(self,*args,posture_weight=0.,diagnostic_mask_base_upper_arm=False,**kwargs):
+    def __init__(self,*args,posture_weight=0.,diagnostic_mask_base_upper_arm=False,align_running_reference=False,**kwargs):
+        if not isinstance(align_running_reference,bool):raise ValueError('align_running_reference must be true or false')
+        self.align_running_reference=align_running_reference
         if not math.isfinite(posture_weight) or posture_weight<0:raise ValueError('Posture weight must be finite and nonnegative')
         self.posture_weight=float(posture_weight)
         self.diagnostic_mask_base_upper_arm=bool(diagnostic_mask_base_upper_arm)
@@ -36,9 +38,17 @@ class PayloadStabilizedTracker(PayloadFinalTracker):
         return super()._prepare_solve(state,sampling_center)
 
     def _running_cost(self,state,action,rollout_step):
-        value=super()._running_cost(state,action,rollout_step)
+        if self.align_running_reference:
+            # pytorch_mppi evaluates stage t on x(t+1). Only the references move;
+            # the first-action boundary cost and the terminal index stay as they are.
+            index=rollout_step+1
+            value=self._fast_stage(state,action,self.tracking_cost.reference_window[index],
+                self.tracking_cost.previous_action,self._compensation_snapshot,rollout_step==0)
+        else:
+            index=rollout_step
+            value=super()._running_cost(state,action,rollout_step)
         if self.posture_weight:
-            value=value+self.posture_weight*(state[:,:6]-self.posture_window[rollout_step]).square().sum(-1)
+            value=value+self.posture_weight*(state[:,:6]-self.posture_window[index]).square().sum(-1)
         return value
 
     def _terminal_cost(self,states,actions):
@@ -51,7 +61,8 @@ class PayloadStabilizedTracker(PayloadFinalTracker):
         data=super().export_sensor_data()
         data.update(payload_posture_weight=np.asarray(self.posture_weight),
             payload_posture_terminal_weight=np.asarray(3*self.posture_weight),
-            payload_diagnostic_mask_base_upper_arm=np.asarray(self.diagnostic_mask_base_upper_arm))
+            payload_diagnostic_mask_base_upper_arm=np.asarray(self.diagnostic_mask_base_upper_arm),
+            payload_align_running_reference=np.asarray(self.align_running_reference))
         return data
 
 
