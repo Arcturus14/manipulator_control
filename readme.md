@@ -5,6 +5,8 @@ UR5 6축 매니퓰레이터의 Cartesian 궤적 추종 성능을 시뮬레이션
 MPPI의 sampling, 사용자 정의 cost, importance-sampling 보정항과 DOB 모드별
 차이는 [`docs/mppi_cost_function.md`](docs/mppi_cost_function.md)에 정리되어 있습니다.
 
+논문 작성용 정리, 그림, 데이터는 [`paper/README.md`](paper/README.md)에 있습니다.
+
 ![최종 궤적 예시](docs/images/metrics_dashboard.png)
 
 ## 주요 기능

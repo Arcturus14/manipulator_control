@@ -17,3 +17,6 @@ kroc/spark_bundle/bundle_manifest.json
 kroc/spark_bundle_*.tar.gz
 
 !docs/images/metrics_dashboard.png
+
+# Paper figures are small, final and meant to be read on GitHub.
+!paper/figures/*.png

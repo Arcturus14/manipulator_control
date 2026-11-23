@@ -1,0 +1,8 @@
+condition,rmse_mean_mm,rmse_std_mm,d_hat_j2_rms_nm
+DOB off,1.3411,0.0651,0.0
+"DOB off, no sensor noise",1.1832,0.0184,0.0
+"DOB on, LPF 6 Hz (used)",2.4381,0.0912,1.8357
+"DOB on, LPF 12 Hz",1.6774,0.0755,1.9617
+"DOB on, no LPF",1.403,0.0623,2.4743
+"DOB on, LPF 6 Hz, no sensor noise",2.3211,0.0211,1.0614
+"DOB on, no LPF, no sensor noise",1.184,0.0184,0.0013

@@ -1,0 +1,55 @@
+# GUI preset: final N0 vs N1 vs D0 comparison, no previous-input projection.
+# 5 kg, YZ circle r0.20 m / T2 s, DOB on, J2 -47.5 Nm, kernel backend, aligned running cost.
+# Final 10 seeds (7207..7297), RMSE over 5--15 s: N0 8.81, N1 5.55, D0 4.40 mm.
+# The GUI runs all three cases. For run_payload_cube_tcp, pass --case N0, N1 or D0.
+seed: 7207
+schema_version: 1
+payload:
+  mass_kg: 5.0
+  side_m: 0.06299605249474366
+  center_in_flange_m:
+  - 0.0
+  - 0.0
+  - 0.03149802624737183
+scene:
+  initial_q:
+  - 3.3856502882768393
+  - -0.7567933336980511
+  - 0.6251575519624236
+  - -1.1785527348654727
+  - -1.7568404349090032
+  - 5.592034923389832
+  duration_s: 16.0
+  period_s: 2.0
+  circle_radius_m: 0.2
+  use_dob: true
+  disturbance_joint: 2
+  disturbance_amplitude_nm: -47.5
+  trajectory: circle_yz
+  reference_start_ramp_s: 3.0
+controller:
+  case: N0 vs N1 vs D0
+  samples: 136
+  horizon: 10
+  rollout_backend: kernel
+  temperature: 64.0
+  noise_variance:
+  - 9.0
+  - 9.0
+  - 9.0
+  - 0.3136
+  - 0.3136
+  - 0.3136
+  q_cutoff_hz: 3.0
+  acceleration_lpf_hz: 6.0
+  payload_collision: true
+  experimental_stabilization:
+    posture_weight: 5000.0
+    boundary_weight: 4.0
+    smooth_weight: 4.0
+    align_running_reference: true
+evaluation:
+  start_s: 5.0
+  end_s: 15.0
+  min_q3_rad: 0.2
+output_root: kroc/results/payload_circle_T2_J2_47p5_compare

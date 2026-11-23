@@ -1,0 +1,109 @@
+condition,case,seed,rmse_mm,max_error_mm,q3_min_rad,valid
+"no disturbance, DOB off",N0,7207,1.3905,2.2838,0.4322,True
+"no disturbance, DOB on",N0,7207,2.4799,3.6733,0.4335,True
+45 Nm,N0,7207,7.0974,22.9688,0.4379,True
+47.5 Nm,N0,7207,10.1241,29.3557,0.4045,True
+45 Nm,N1,7207,4.5179,12.4858,0.4431,True
+47.5 Nm,N1,7207,6.0389,16.6435,0.3698,True
+45 Nm,D0,7207,3.8502,9.4075,0.4501,True
+47.5 Nm,D0,7207,4.667,11.5067,0.3523,True
+"45 Nm, actuator clamp removed (non-physical diagnostic)",N0,7207,2.4799,3.6734,0.4335,True
+"no disturbance, DOB off",N0,7217,1.2811,2.078,0.4431,True
+"no disturbance, DOB on",N0,7217,2.3756,3.7095,0.4416,True
+45 Nm,N0,7217,4.9981,18.7455,0.4574,True
+47.5 Nm,N0,7217,7.9346,25.3164,0.4569,True
+45 Nm,N1,7217,3.5727,11.0374,0.4578,True
+47.5 Nm,N1,7217,5.0864,16.4496,0.4128,True
+45 Nm,D0,7217,3.2494,8.5473,0.4578,True
+47.5 Nm,D0,7217,4.1385,12.2081,0.3833,True
+"45 Nm, actuator clamp removed (non-physical diagnostic)",N0,7217,2.3756,3.7096,0.4416,True
+"no disturbance, DOB off",N0,7227,1.2755,1.9917,0.4313,True
+"no disturbance, DOB on",N0,7227,2.2853,3.4544,0.4292,True
+45 Nm,N0,7227,6.0476,18.7831,0.4497,True
+47.5 Nm,N0,7227,9.2301,31.0409,0.3791,True
+45 Nm,N1,7227,3.828,10.5685,0.4521,True
+47.5 Nm,N1,7227,5.8164,18.1268,0.3543,True
+45 Nm,D0,7227,3.3867,8.5755,0.4521,True
+47.5 Nm,D0,7227,4.4988,12.6275,0.3315,True
+"45 Nm, actuator clamp removed (non-physical diagnostic)",N0,7227,2.2853,3.4543,0.4292,True
+"no disturbance, DOB off",N0,7237,1.3958,2.5176,0.4506,True
+"no disturbance, DOB on",N0,7237,2.4798,4.2513,0.4496,True
+45 Nm,N0,7237,5.4458,16.4703,0.4456,True
+47.5 Nm,N0,7237,8.8417,26.5382,0.417,True
+45 Nm,N1,7237,3.925,10.0208,0.4456,True
+47.5 Nm,N1,7237,5.6422,16.6703,0.3748,True
+45 Nm,D0,7237,3.5044,7.3693,0.4456,True
+47.5 Nm,D0,7237,4.4486,10.9555,0.3534,True
+"45 Nm, actuator clamp removed (non-physical diagnostic)",N0,7237,2.4799,4.2515,0.4456,True
+"no disturbance, DOB off",N0,7247,1.337,2.7066,0.4413,True
+"no disturbance, DOB on",N0,7247,2.5007,4.1534,0.4422,True
+45 Nm,N0,7247,6.5501,18.3474,0.4509,True
+47.5 Nm,N0,7247,8.9781,23.4022,0.3727,True
+45 Nm,N1,7247,4.2853,10.6598,0.4509,True
+47.5 Nm,N1,7247,5.7482,14.6774,0.3338,True
+45 Nm,D0,7247,3.7421,8.3899,0.4509,True
+47.5 Nm,D0,7247,4.5914,10.6888,0.3154,True
+"45 Nm, actuator clamp removed (non-physical diagnostic)",N0,7247,2.5007,4.1536,0.4422,True
+"no disturbance, DOB off",N0,7257,1.2259,2.0936,0.4358,True
+"no disturbance, DOB on",N0,7257,2.2866,3.7847,0.4335,True
+45 Nm,N0,7257,5.3139,15.2486,0.4525,True
+47.5 Nm,N0,7257,8.1541,25.3375,0.4415,True
+45 Nm,N1,7257,3.6224,9.6156,0.4525,True
+47.5 Nm,N1,7257,5.1184,14.9578,0.4087,True
+45 Nm,D0,7257,3.2896,8.069,0.4525,True
+47.5 Nm,D0,7257,4.1103,11.1798,0.3851,True
+"45 Nm, actuator clamp removed (non-physical diagnostic)",N0,7257,2.2866,3.7847,0.4335,True
+"no disturbance, DOB off",N0,7267,1.4293,2.5847,0.436,True
+"no disturbance, DOB on",N0,7267,2.5242,4.3524,0.4385,True
+45 Nm,N0,7267,5.6107,16.3574,0.445,True
+47.5 Nm,N0,7267,8.435,27.4942,0.3956,True
+45 Nm,N1,7267,3.9029,10.0316,0.445,True
+47.5 Nm,N1,7267,5.5686,16.1434,0.3864,True
+45 Nm,D0,7267,3.4101,7.7896,0.445,True
+47.5 Nm,D0,7267,4.3072,10.8545,0.3607,True
+"45 Nm, actuator clamp removed (non-physical diagnostic)",N0,7267,2.5242,4.3524,0.4385,True
+"no disturbance, DOB off",N0,7277,1.3907,2.2646,0.4346,True
+"no disturbance, DOB on",N0,7277,2.5297,3.94,0.4314,True
+45 Nm,N0,7277,5.8224,16.5959,0.4323,True
+47.5 Nm,N0,7277,8.6287,28.8606,0.4494,True
+45 Nm,N1,7277,3.934,10.1867,0.4364,True
+47.5 Nm,N1,7277,5.3312,16.2763,0.4105,True
+45 Nm,D0,7277,3.5143,7.6519,0.4388,True
+47.5 Nm,D0,7277,4.3385,12.9427,0.3625,True
+"45 Nm, actuator clamp removed (non-physical diagnostic)",N0,7277,2.5297,3.9401,0.4314,True
+"no disturbance, DOB off",N0,7287,1.3174,2.2903,0.4353,True
+"no disturbance, DOB on",N0,7287,2.4768,3.982,0.4352,True
+45 Nm,N0,7287,5.9402,15.8189,0.4399,True
+47.5 Nm,N0,7287,8.9686,23.1887,0.4397,True
+45 Nm,N1,7287,4.0457,9.258,0.4399,True
+47.5 Nm,N1,7287,5.7076,14.5683,0.4104,True
+45 Nm,D0,7287,3.644,7.7277,0.4399,True
+47.5 Nm,D0,7287,4.5574,10.4096,0.406,True
+"45 Nm, actuator clamp removed (non-physical diagnostic)",N0,7287,2.4768,3.982,0.4352,True
+"no disturbance, DOB off",N0,7297,1.3683,2.4047,0.4354,True
+"no disturbance, DOB on",N0,7297,2.4422,3.864,0.432,True
+45 Nm,N0,7297,6.2498,18.6561,0.4547,True
+47.5 Nm,N0,7297,8.7733,25.1372,0.4236,True
+45 Nm,N1,7297,4.1238,10.2504,0.4547,True
+47.5 Nm,N1,7297,5.4705,15.0739,0.3848,True
+45 Nm,D0,7297,3.63,8.1178,0.4547,True
+47.5 Nm,D0,7297,4.3687,10.4104,0.3695,True
+"45 Nm, actuator clamp removed (non-physical diagnostic)",N0,7297,2.4422,3.864,0.432,True
+"45 Nm, 0.1 Hz +-5 % variation",N0,7207,7.463,29.0253,0.4218,True
+"45 Nm, 40 s run (5-39 s)",N0,7207,6.7443,22.9688,0.4203,True
+"45 Nm, 0.1 Hz +-5 % variation",N1,7207,4.622,16.3532,0.3902,True
+"45 Nm, 40 s run (5-39 s)",N1,7207,4.4313,12.6836,0.4027,True
+"45 Nm, 0.1 Hz +-5 % variation",D0,7207,3.8109,11.4812,0.3726,True
+"45 Nm, 40 s run (5-39 s)",D0,7207,3.8144,9.6604,0.3792,True
+"45 Nm, 0.1 Hz +-5 % variation",N0,7217,5.0177,18.2403,0.4526,True
+"45 Nm, 40 s run (5-39 s)",N0,7217,6.2863,26.8678,0.4169,True
+"45 Nm, 0.1 Hz +-5 % variation",N1,7217,3.6558,11.9928,0.4577,True
+"45 Nm, 40 s run (5-39 s)",N1,7217,4.0292,13.4758,0.4162,True
+"45 Nm, 0.1 Hz +-5 % variation",D0,7217,3.2437,8.7524,0.4565,True
+"45 Nm, 40 s run (5-39 s)",D0,7217,3.5318,9.601,0.4097,True
+"45 Nm, 0.1 Hz +-5 % variation",N0,7227,6.0673,25.3259,0.4377,True
+"45 Nm, 40 s run (5-39 s)",N0,7227,6.6334,22.0199,0.4308,True
+"45 Nm, 0.1 Hz +-5 % variation",N1,7227,3.911,14.8324,0.4069,True
+"45 Nm, 40 s run (5-39 s)",N1,7227,4.2945,12.5678,0.4257,True
+"45 Nm, 0.1 Hz +-5 % variation",D0,7227,3.3583,10.8231,0.389,True
+"45 Nm, 40 s run (5-39 s)",D0,7227,3.6665,9.2521,0.4141,True
