@@ -195,21 +195,80 @@ def figures(seeds,folder=None):
     series=lambda case,a,stat,col:data[col][(data['case']==case)&(np.isclose(data['amplitude_abs_nm'],a))&(data['statistic']==stat)]
     time=series('N0',table[0]['amplitude_abs_nm'],'mean','t_s')
 
-    # 1. RMSE versus disturbance, valid seeds marked.
-    fig,ax=plt.subplots(figsize=(7.2,4.2))
-    levels=[t['amplitude_abs_nm'] for t in table if t['amplitude_abs_nm']>0]
-    for case in CASES:
-        rows=[t for t in table if t['amplitude_abs_nm']>0]
-        mean=np.array([t[case]['rmse_mean_mm'] for t in rows]);valid=np.array([t[case]['valid'] for t in rows])
-        ax.plot(levels,mean,color=COLORS[case],lw=2,label=case,zorder=3)
-        full=valid==len(seeds)
-        ax.scatter(np.array(levels)[full],mean[full],s=36,color=COLORS[case],edgecolor=SURFACE,linewidth=1.5,zorder=4)
-        ax.scatter(np.array(levels)[~full],mean[~full],s=36,facecolor=SURFACE,edgecolor=COLORS[case],linewidth=1.5,zorder=4)
-    base=next(t for t in table if t['amplitude_abs_nm']==0)['N0']['rmse_mean_mm']
-    ax.axhline(base,color=MUTED,lw=1);ax.text(levels[0],base*.86,'no disturbance',color=MUTED,fontsize=9,va='top')
-    ax.set_yscale('log');ax.set_xlabel('J2 disturbance [Nm]');ax.set_ylabel('TCP RMSE, 5–15 s [mm]')
-    ax.set_title('Filled: all 10 seeds valid   Open: at least one invalid seed',fontsize=9,color=MUTED,loc='left')
-    ax.legend(loc='upper left');fig.tight_layout();fig.savefig(folder/'rmse_vs_disturbance.png',dpi=200);plt.close(fig)
+    # 1. RMSE and clipping from the first clipping level to the first all-invalid level.
+    #    The flat start is drawn on a compressed x scale (marked with an approx sign) so the
+    #    levels where the methods separate get the width. Valid seeds sit under the RMSE axis;
+    #    a red cross marks a method whose seeds all violate a constraint, a light one some of them.
+    every=[t for t in table if t['amplitude_abs_nm']>0]
+    # Saturation onset: clipping on at least 0.5 % of the evaluated steps (35 Nm has only isolated steps).
+    first_clip=next(t['amplitude_abs_nm'] for t in every if any(t[c]['clip_percent']>=.5 for c in CASES))
+    first_dead=next((t['amplitude_abs_nm'] for t in every if all(t[c]['valid']==0 for c in CASES)),every[-1]['amplitude_abs_nm'])
+    rows=[t for t in every if first_clip<=t['amplitude_abs_nm']<=first_dead]
+    base_rmse=next(t for t in table if t['amplitude_abs_nm']==0)['N0']['rmse_mean_mm']
+    flat_end=max([t['amplitude_abs_nm'] for t in rows if all(t[c]['rmse_mean_mm']<1.1*base_rmse for c in CASES)],default=first_clip)
+    span=max(flat_end-first_clip,1e-9);squeeze=1.5
+    def at(a):
+        a=np.asarray(a,dtype=float)
+        return np.where(a<=flat_end,(a-first_clip)/span*squeeze,squeeze+(a-flat_end))
+    levels=np.array([t['amplitude_abs_nm'] for t in rows]);x=at(levels)
+    runs=[r for r in summary['runs'] if first_clip<=r['amplitude_abs_nm']<=first_dead]
+    count=len(seeds);CRITICAL='#d03b3b';PARTIAL='#de7676';offset=dict(N0=-.12,N1=0.,D0=.12)
+    fig,axes=plt.subplots(2,1,figsize=(8,7.6),sharex=True,gridspec_kw=dict(height_ratios=[3,2],hspace=.42))
+    for ax,field,mean_key,label in ((axes[0],'rmse_mm','rmse_mean_mm','TCP RMSE, 5–15 s [mm]'),
+                                    (axes[1],'j_clip_nm_s','j_clip_nm_s','Clipping integral [Nm s]')):
+        for case in CASES:
+            mine=[r for r in runs if r['case']==case]
+            ax.scatter(at([r['amplitude_abs_nm'] for r in mine])+offset[case],[r[field] for r in mine],
+                       s=10,color=COLORS[case],alpha=.25,lw=0,zorder=2)
+            mean=np.array([t[case][mean_key] for t in rows]);valid=np.array([t[case]['valid'] for t in rows])
+            dead=valid==0;partial=(valid>0)&(valid<count)
+            ax.plot(x,mean,color=COLORS[case],lw=2,label=case,zorder=3,clip_on=False)
+            ax.scatter(x,mean,s=36,color=COLORS[case],edgecolor=SURFACE,linewidth=1.5,zorder=4,clip_on=False)
+            ax.scatter(x[partial],mean[partial],s=110,marker='x',color=PARTIAL,linewidth=2.6,zorder=5,clip_on=False)
+            ax.scatter(x[dead],mean[dead],s=90,marker='x',color=CRITICAL,linewidth=2.2,zorder=5,clip_on=False)
+        ax.set_ylabel(label)
+        top=max(max(r[field] for r in runs),max(t[c][mean_key] for t in rows for c in CASES))
+        ax.set_ylim(-.06*top,top*1.08)
+        ax.axvspan(-.35,squeeze+.35,color=GRID_INK,alpha=.35,lw=0,zorder=0)
+        ax.text(squeeze+.5,0,'≈',transform=ax.get_xaxis_transform(),ha='center',va='center',fontsize=13,color=MUTED,
+                bbox=dict(boxstyle='square,pad=.05',fc=SURFACE,ec='none'),clip_on=False,zorder=6)
+    axes[0].axhline(base_rmse,color=MUTED,lw=1,zorder=1)
+    axes[0].text(squeeze/2,.97,f'{first_clip:g}–{flat_end:g} Nm\ncompressed',transform=axes[0].get_xaxis_transform(),
+                 ha='center',va='top',fontsize=8,color=MUTED)
+    from matplotlib.lines import Line2D
+    handles,names=axes[0].get_legend_handles_labels()
+    handles.append(Line2D([],[],marker='x',color=PARTIAL,lw=0,markersize=8,markeredgewidth=2.4))
+    names.append('some seeds constraint violated')
+    handles.append(Line2D([],[],marker='x',color=CRITICAL,lw=0,markersize=8,markeredgewidth=2))
+    names.append('all seeds constraint violated')
+    axes[0].legend(handles,names,loc='upper left',bbox_to_anchor=(.25,1),fontsize=9)
+    axes[0].set_title('Large dots: mean of 10 seeds, small dots: seeds; grey line: no disturbance',
+                      fontsize=9,color=MUTED,loc='left')
+    # One compact row of valid seeds (N0/N1/D0) under the RMSE axis.
+    under=axes[0].get_xaxis_transform()
+    axes[0].text(-.45,-.17,'valid seeds\nN0/N1/D0',transform=under,fontsize=8,color=MUTED,ha='right',va='center',linespacing=1.1)
+    def label(t):return '/'.join(str(t[c]['valid']) for c in CASES)
+    # Levels where every method keeps every seed share one label; the rest are written per level.
+    full_run=[i for i,t in enumerate(rows) if all(t[c]['valid']==count for c in CASES)]
+    if full_run:
+        lo,hi=x[full_run[0]],x[full_run[-1]];y=-.15
+        axes[0].plot([lo,hi],[y,y],transform=under,color=MUTED,lw=1,clip_on=False)
+        for end in (lo,hi):axes[0].plot([end,end],[y-.015,y+.015],transform=under,color=MUTED,lw=1,clip_on=False)
+        axes[0].text((lo+hi)/2,y-.045,f'{count}/{count}/{count}',transform=under,fontsize=8.5,
+                     ha='center',va='center',color=INK)
+    for i,(t,xi) in enumerate(zip(rows,x)):
+        if i in full_run:continue
+        dead_all=all(t[c]['valid']==0 for c in CASES)
+        axes[0].text(xi,-.17,label(t),transform=under,fontsize=8.5,ha='center',va='center',
+                     color=CRITICAL if dead_all else INK,fontweight='bold')
+    tick=[(xi,f'{a:g}') for a,xi in zip(levels,x) if a in (first_clip,flat_end) or a>flat_end]
+    for ax in axes:
+        ax.set_xticks([p for p,_ in tick])
+        ax.set_xticklabels([l if float(l)==int(float(l)) or float(l)==first_clip else '\n'+l for _,l in tick],fontsize=8.5)
+        ax.set_xlim(-.45,x[-1]+.5);ax.tick_params(axis='x',labelbottom=True)
+    axes[1].set_xlabel('J2 disturbance magnitude [Nm]')
+    fig.subplots_adjust(left=.13,right=.98,top=.95,bottom=.08)
+    fig.savefig(folder/'rmse_vs_disturbance.png',dpi=200);plt.close(fig)
 
     # 2. Disturbance profiles at representative levels.
     shown=representative(table,len(seeds))
